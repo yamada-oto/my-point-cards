@@ -75,6 +75,17 @@ input,select,textarea{font:inherit;font-size:16px;color:var(--fg);background:var
 .plus{align-self:center;width:56px;height:56px;border-radius:50%;background:var(--surface);
   border:1.5px dashed var(--muted);font-size:28px;color:var(--muted);line-height:1}
 
+/* 編集中だけ ✕ を出す */
+.x{display:none}
+.editing .x{display:block}
+.editing .app-tile,.editing .card{outline:2px dashed var(--accent);outline-offset:3px}
+body.editing .corner,body.editing .edge{display:none}
+#editBar{position:fixed;left:0;right:0;bottom:calc(var(--sab) + 16px);display:flex;gap:10px;
+  justify-content:space-between;align-items:center;padding:0 max(16px,var(--sar)) 0 max(16px,var(--sal));z-index:20}
+#editBar[hidden]{display:none}
+#editBar button{background:var(--surface);box-shadow:0 2px 10px rgba(0,0,0,.12);border-radius:12px;padding:12px 16px;font-weight:700}
+#editBar #ebDone{background:var(--accent);color:#fff}
+
 /* 未登録時 */
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
   text-align:center;color:var(--muted);min-height:60vh}
@@ -169,6 +180,11 @@ input[type=range]{padding:0;border:0;background:none;touch-action:none}
 </button>
 <button class="edge" id="btnNext" aria-label="次に近い場所" hidden>›</button>
 <button class="edge" id="btnPrev" aria-label="前の場所" hidden>‹</button>
+<div id="editBar" hidden>
+  <button id="ebAdjust">位置を調整</button>
+  <button id="ebDetail">名前など</button>
+  <button id="ebDone">完了</button>
+</div>
 
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="inner" id="sheetBody"></div></div>
@@ -186,7 +202,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.25-4";
+const VERSION = "2026.11.25-6";
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = blank(); }
@@ -196,6 +212,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 
 /* ===== 位置 ===== */
 let pos = null, order = [], idx = 0, mode = "empty"; // mode: place | empty
+let editing = false; // 長押しで入る編集状態（✕・位置調整などが出る）
+function syncEdit(){ document.body.classList.toggle("editing", editing); document.getElementById("editBar").hidden = !editing; }
+function enterEdit(){ if(!current()) return; editing = true; render(); }
 function dist(a,b){
   const R=6371000, r=x=>x*Math.PI/180;
   const dLat=r(b.lat-a.lat), dLng=r(b.lng-a.lng);
@@ -267,10 +286,11 @@ function render(){
   const next = document.getElementById("btnNext"), prev = document.getElementById("btnPrev");
   next.hidden = !(order.length && (mode==="empty" || idx < order.length-1));
   prev.hidden = !(mode==="place" && idx>0);
-  if(!p){ stage.innerHTML = emptyView(); bindEmpty(); return; }
+  if(!p){ editing=false; syncEdit(); stage.innerHTML = emptyView(); bindEmpty(); return; }
+  syncEdit();
   const d = pos ? dist(pos,p) : null;
   const inRange = d!=null && d<=p.radius;
-  let html = `<div class="wrap">
+  let html = `<div class="wrap${editing?" editing":""}">
     <div class="head"><h1>${esc(p.name)}</h1><span class="dist">${d==null?"位置不明":(inRange?"範囲内 · ":"")+fmtDist(d)}</span></div>`;
   if(p.point){
     const b = BRANDS[p.point], c = S.cards[p.point]||{};
@@ -363,9 +383,9 @@ function launch(url, name, storeId){
 }
 function bindPlace(p){
   const pl = document.getElementById("pointLaunch");
-  if(pl) pressable(pl, {tap:()=>launch(S.brandUrls[p.point], BRANDS[p.point].short, BRANDS[p.point].storeId), long:()=>openEdit(p,{kind:"point"})});
+  if(pl) pressable(pl, {tap:()=>editing?openEdit(p,{kind:"point"}):launch(S.brandUrls[p.point], BRANDS[p.point].short, BRANDS[p.point].storeId), long:enterEdit});
   const cp = document.getElementById("codePanel");
-  if(cp) pressable(cp, {tap:()=>showBright(p.point), long:()=>openEdit(p,{kind:"point"})});
+  if(cp) pressable(cp, {tap:()=>editing?openEdit(p,{kind:"point"}):showBright(p.point), long:enterEdit});
   stage.querySelector("[data-del-point]")?.addEventListener("click", async ()=>{
     if(await ask(`${BRANDS[p.point].name}をこの場所から削除しますか？`, "削除")){ p.point=null; save(); render(); }
   });
@@ -377,8 +397,8 @@ function bindPlace(p){
     const id=t.dataset.app, a=S.apps.find(x=>x.id===id);
     let target=null;
     pressable(t, {
-      tap:()=>launch(a.url, a.name, a.storeId),
-      long:()=>openEdit(p,{kind:"app", id}),
+      tap:()=>editing?openEdit(p,{kind:"app", id}):launch(a.url, a.name, a.storeId),
+      long:enterEdit,
       drag:{
         start(){ t.classList.add("dragging"); },
         move(e,dx,dy){
@@ -408,19 +428,20 @@ let wakeLock=null;
 async function showBright(brand){
   const card=S.cards[brand];
   if(!card||!card.number){ toast("カード番号が未設定です。長押しで設定できます"); return; }
-  const d=document.createElement("div"); d.id="bright";
+  const d=document.createElement("div"); d.id="bright"; d.dataset.t=Date.now();
   d.innerHTML=`<svg></svg><div class="num">${esc(spaced(card.number))}</div><p>タップで元に戻る</p>`;
   document.body.appendChild(d);
   drawBarcode(d.querySelector("svg"), card, 3, 160);
   try{ wakeLock = await navigator.wakeLock?.request("screen"); }catch(e){}
-  d.onclick=()=>{ d.remove(); try{wakeLock&&wakeLock.release();}catch(e){} wakeLock=null; };
+  d.onclick=()=>{ if(Date.now()-d.dataset.t<450) return; d.remove(); try{wakeLock&&wakeLock.release();}catch(e){} wakeLock=null; };
 }
 
 /* ===== シート ===== */
 const sheet=document.getElementById("sheet"), scrim=document.getElementById("scrim"), body=document.getElementById("sheetBody");
-function openSheet(html){ body.innerHTML=html; sheet.classList.add("on"); scrim.classList.add("on"); sheet.scrollTop=0; }
+let sheetAt=0;
+function openSheet(html){ sheetAt=Date.now(); body.innerHTML=html; sheet.classList.add("on"); scrim.classList.add("on"); sheet.scrollTop=0; }
 function closeSheet(){ sheet.classList.remove("on"); scrim.classList.remove("on"); }
-scrim.onclick=closeSheet;
+scrim.onclick=()=>{ if(Date.now()-sheetAt>450) closeSheet(); }; /* 開いた直後の誤タップでは閉じない */
 const $ = s => body.querySelector(s);
 
 function ensurePlace(p){
@@ -546,7 +567,7 @@ function openAppForm(app, done){
 function openEdit(p, item){
   let mid="";
   if(item.kind==="point") mid=`<h2 style="margin-top:4px">${esc(BRANDS[p.point].name)}</h2>${cardFields(p.point)}`;
-  else { const a=S.apps.find(x=>x.id===item.id); mid=`<div class="row">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(linkLabel(a.url, a.name, a.storeId))}</small></span></div><button class="btn sub" id="editApp">アプリの名前・アイコン・リンクを編集</button>`; }
+  else if(item.kind==="app"){ const a=S.apps.find(x=>x.id===item.id); mid=`<div class="row">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(linkLabel(a.url, a.name, a.storeId))}</small></span></div><button class="btn sub" id="editApp">アプリの名前・アイコン・リンクを編集</button>`; }
   openSheet(`<h2>編集</h2>
     <label class="f">場所の名前<input id="pName" value="${esc(p.name)}"></label>
     ${mid}
@@ -566,7 +587,7 @@ function openEdit(p, item){
   if(item.kind==="app") $("#editApp").onclick=()=>openAppForm(S.apps.find(x=>x.id===item.id), ()=>{ closeSheet(); render(); });
   $("#delPlace").onclick=async()=>{
     if(await ask(`「${p.name}」を削除しますか？`, "削除")){
-      S.places=S.places.filter(x=>x.id!==p.id); save(); sortPlaces(); mode="empty"; idx=0; closeSheet(); locate(true);
+      S.places=S.places.filter(x=>x.id!==p.id); save(); sortPlaces(); mode="empty"; idx=0; editing=false; closeSheet(); locate(true);
     }
   };
 }
@@ -665,6 +686,7 @@ let tt; function toast(m){ const t=document.getElementById("toast"); t.textConte
 /* ===== 移動（＞とスワイプ） ===== */
 function go(step){
   if(!order.length) return;
+  editing=false;
   if(mode==="empty"){ if(step>0){ mode="place"; idx=0; } }
   else { const n=idx+step; if(n<0||n>=order.length) return; idx=n; }
   render();
@@ -681,6 +703,9 @@ stage.addEventListener("touchend",e=>{
 });
 document.getElementById("btnRefresh").onclick=()=>locate(false);
 document.getElementById("btnMenu").onclick=openMenu;
+document.getElementById("ebAdjust").onclick=()=>{ const p=current(); if(p) openMap(p); };
+document.getElementById("ebDetail").onclick=()=>{ const p=current(); if(p) openEdit(p,{kind:"place"}); };
+document.getElementById("ebDone").onclick=()=>{ editing=false; render(); };
 
 /* ピンチ拡大を止める */
 ["gesturestart","gesturechange","gestureend"].forEach(t=>document.addEventListener(t,e=>e.preventDefault()));
