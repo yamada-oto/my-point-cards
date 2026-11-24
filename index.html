@@ -202,7 +202,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.25-6";
+const VERSION = "2026.11.25-7";
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = blank(); }
@@ -315,7 +315,7 @@ function render(){
         ${appIcon(a)}<span>${esc(a.name)}</span></div>`;
     }).join("") + `</div>`;
   }
-  if(p.apps.length < 3 || !p.point) html += `<button class="plus" id="plusBelow" aria-label="追加">＋</button>`;
+  if((editing || (!p.point && !p.apps.length)) && (p.apps.length < 3 || !p.point)) html += `<button class="plus" id="plusBelow" aria-label="追加">＋</button>`;
   html += `</div>`;
   stage.innerHTML = html;
   if(p.point) drawBarcode(document.getElementById("bc"), S.cards[p.point], 2, 84);
