@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-title" content="ポイント">
 <title>店舗ポイントカード</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,16 +15,16 @@
 <style>
 /* レイアウト: 1画面アプリ。上にカード、下に四隅の小さな操作ボタン */
 :root{
-  --bg:#f3f4f6; --surface:#ffffff; --fg:#1b1d22; --muted:#6b7079; --line:#dfe2e7;
-  --accent:#2f6fde; --danger:#d64545; --overlay:rgba(16,18,24,.45);
+  --bg:#ffffff; --surface:#f2f2f5; --fg:#1b1d22; --muted:#6b7079; --line:#dcdce2;
+  --accent:#2f6fde; --danger:#d64545; --overlay:rgba(16,18,24,.45); --dk:#4a505b;
   --font:"Noto Sans JP",-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;
   --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
   --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#121418; --surface:#1d2027; --fg:#eceef2; --muted:#9aa0aa; --line:#2e323b;
-  --accent:#6b9bff; --danger:#ff6b6b; --overlay:rgba(0,0,0,.6); color-scheme:dark}}
+  --bg:#000000; --surface:#1c1c1e; --fg:#eceef2; --muted:#9aa0aa; --line:#2c2c2e;
+  --accent:#6b9bff; --danger:#ff6b6b; --overlay:rgba(0,0,0,.6); --dk:#5d6470; color-scheme:dark}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:pan-x pan-y}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;overflow:hidden;
@@ -113,8 +115,9 @@ body.editing .corner,body.editing .edge{display:none}
   max-height:86vh;overflow-y:auto;transform:translateY(105%);transition:transform .25s ease;
   padding:10px max(16px,var(--sar)) calc(var(--sab) + 20px) max(16px,var(--sal))}
 .sheet.on{transform:none}
-.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
-.sheet h2{font-size:16px;margin:0 0 14px;text-align:center}
+.sheet .grab{height:26px;margin:-6px 0 0;position:relative;touch-action:none}
+.sheet .grab::after{content:"";position:absolute;left:50%;top:10px;width:40px;height:5px;border-radius:3px;background:var(--line);transform:translateX(-50%)}
+.sheet h2{font-size:16px;margin:0 0 14px;text-align:center;touch-action:none}
 .sheet .inner{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 .choice{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .choice button,.brandpick button{background:var(--bg);border-radius:16px;padding:18px 8px;display:flex;
@@ -141,6 +144,28 @@ label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--mu
 .loc-btn{flex:none;width:auto;padding:12px 14px;display:flex;gap:6px;align-items:center}
 .loc-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
 .results{display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto}
+
+/* アプリ関連の画面は濃いグレー */
+.btn.dk{background:var(--dk);color:#fff}
+.sheet.app .btn:not(.sub):not(.danger){background:var(--dk);color:#fff}
+.sheet.app .grab::after{background:var(--dk)}
+
+/* 場所の行: 左右スワイプ */
+.swipe{position:relative;border-radius:12px;overflow:hidden;background:var(--bg)}
+.swipe.cur{outline:2px solid var(--accent)}
+.swipe .act{position:absolute;top:0;bottom:0;width:88px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+.swipe .act-edit{left:0;background:var(--accent)}
+.swipe .act-del{right:0;background:var(--danger)}
+.swipe .row{position:relative;transition:transform .2s;touch-action:pan-y;cursor:pointer}
+.pin{width:40px;height:40px;border-radius:10px;background:var(--line);display:grid;place-items:center;flex:none}
+.pin svg{width:22px;height:22px;stroke:var(--accent);fill:none;stroke-width:2;stroke-linejoin:round}
+
+/* アプリ一覧: 長押しで並べ替え */
+.sortable .row{touch-action:pan-y;cursor:grab}
+.row.lift{position:relative;z-index:5;transition:none;box-shadow:0 8px 20px rgba(0,0,0,.25)}
+
+/* 編集中の場所名 */
+.name-in{flex:1;min-width:0;font-size:17px!important;font-weight:700;padding:6px 10px;border:1.5px dashed var(--accent);border-radius:8px;background:var(--bg)}
 
 /* 明るい表示 */
 #bright{position:fixed;inset:0;background:#fff;z-index:60;display:flex;flex-direction:column;
@@ -181,8 +206,7 @@ input[type=range]{padding:0;border:0;background:none;touch-action:none}
 <button class="edge" id="btnNext" aria-label="次に近い場所" hidden>›</button>
 <button class="edge" id="btnPrev" aria-label="前の場所" hidden>‹</button>
 <div id="editBar" hidden>
-  <button id="ebAdjust">位置を調整</button>
-  <button id="ebDetail">名前など</button>
+  <button id="ebDetail">修正</button>
   <button id="ebDone">完了</button>
 </div>
 
@@ -197,15 +221,18 @@ const BRANDS = {
     bg:"linear-gradient(135deg,#d0021b 0%,#8f0012 100%)", color:"#bf0000"},
   vpoint:{name:"Vポイント", short:"Vポイント", term:"Vポイントアプリ", storeId:"468976361",
     bg:"linear-gradient(135deg,#0b2a6f 0%,#16469e 70%,#f2c200 160%)", color:"#0b2a6f"},
-  ponta:{name:"Ponta", short:"Ponta", term:"Ponta ポイント", storeId:"1036066384",
+  ponta:{name:"Ponta", short:"Ponta", term:"Ponta ポイント", storeId:"1036066384", format:"codabar",
     bg:"linear-gradient(135deg,#f7a400 0%,#e66a00 100%)", color:"#f08c00"}
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.25-7";
+const VERSION = "2026.11.25-9";
+const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = blank(); }
+/* Pontaのバーコードはコーデバー(NW-7)。以前の初期値CODE128で保存済みなら一度だけ直す */
+if(S.cards && S.cards.ponta && S.cards.ponta.format==="CODE128" && !S.fixPonta){ S.cards.ponta.format="codabar"; S.fixPonta=true; save(); }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast("保存できませんでした"); } }
 const uid = () => Math.random().toString(36).slice(2,10);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -290,8 +317,11 @@ function render(){
   syncEdit();
   const d = pos ? dist(pos,p) : null;
   const inRange = d!=null && d<=p.radius;
+  const title = editing
+    ? `<input id="nameEdit" class="name-in" value="${esc(p.name)}" maxlength="40" aria-label="場所の名前">`
+    : `<h1>${esc(p.name)}</h1>`;
   let html = `<div class="wrap${editing?" editing":""}">
-    <div class="head"><h1>${esc(p.name)}</h1><span class="dist">${d==null?"位置不明":(inRange?"範囲内 · ":"")+fmtDist(d)}</span></div>`;
+    <div class="head">${title}<span class="dist">${d==null?"位置不明":(inRange?"範囲内 · ":"")+fmtDist(d)}</span></div>`;
   if(p.point){
     const b = BRANDS[p.point], c = S.cards[p.point]||{};
     html += `<div class="card">
@@ -300,11 +330,11 @@ function render(){
         <button class="launch" id="pointLaunch">${brandIcon(p.point)}<span><b>${esc(b.short)}</b><small>アプリを開く</small></span></button>
         <div class="brandmark"><small>POINT CARD</small>${esc(b.name)}</div>
       </div>
-      <button class="code-panel" id="codePanel" style="width:100%;display:block">
+      ${c.number?`<button class="code-panel" id="codePanel" style="width:100%;display:block">
         <svg id="bc"></svg>
         <div class="num">${esc(spaced(c.number))}</div>
         <div class="hint">タップで明るく表示</div>
-      </button>
+      </button>`:""}
     </div>`;
   }
   if(p.apps.length){
@@ -318,7 +348,7 @@ function render(){
   if((editing || (!p.point && !p.apps.length)) && (p.apps.length < 3 || !p.point)) html += `<button class="plus" id="plusBelow" aria-label="追加">＋</button>`;
   html += `</div>`;
   stage.innerHTML = html;
-  if(p.point) drawBarcode(document.getElementById("bc"), S.cards[p.point], 2, 84);
+  if(p.point && S.cards[p.point]?.number) drawBarcode(document.getElementById("bc"), S.cards[p.point], 2, 84);
   bindPlace(p);
 }
 const spaced = n => (n||"").replace(/(\d{4})(?=\d)/g,"$1 ");
@@ -382,6 +412,8 @@ function launch(url, name, storeId){
   location.href = url || defaultLink(name, storeId);
 }
 function bindPlace(p){
+  const ni = document.getElementById("nameEdit");
+  if(ni) ni.addEventListener("change",()=>{ const v=ni.value.trim(); if(v){ p.name=v; save(); } else ni.value=p.name; });
   const pl = document.getElementById("pointLaunch");
   if(pl) pressable(pl, {tap:()=>editing?openEdit(p,{kind:"point"}):launch(S.brandUrls[p.point], BRANDS[p.point].short, BRANDS[p.point].storeId), long:enterEdit});
   const cp = document.getElementById("codePanel");
@@ -439,10 +471,31 @@ async function showBright(brand){
 /* ===== シート ===== */
 const sheet=document.getElementById("sheet"), scrim=document.getElementById("scrim"), body=document.getElementById("sheetBody");
 let sheetAt=0;
-function openSheet(html){ sheetAt=Date.now(); body.innerHTML=html; sheet.classList.add("on"); scrim.classList.add("on"); sheet.scrollTop=0; }
+function openSheet(html, kind){ sheetAt=Date.now(); body.innerHTML=html; sheet.classList.toggle("app", kind==="app"); sheet.classList.add("on"); scrim.classList.add("on"); sheet.scrollTop=0; }
 function closeSheet(){ sheet.classList.remove("on"); scrim.classList.remove("on"); }
 scrim.onclick=()=>{ if(Date.now()-sheetAt>450) closeSheet(); }; /* 開いた直後の誤タップでは閉じない */
 const $ = s => body.querySelector(s);
+/* 開いた直後に届く誤タップ（指を離したときのクリック）は、シートの中でも無視する */
+sheet.addEventListener("click",e=>{ if(Date.now()-sheetAt<450){ e.stopPropagation(); e.preventDefault(); } },true);
+/* 上部（つまみ・見出し）を下にスワイプして閉じる */
+(function(){
+  let st=null, dy=0;
+  sheet.addEventListener("pointerdown",e=>{
+    if(!e.target.closest(".grab, h2")) return;
+    st={y:e.clientY,t:Date.now()}; dy=0; sheet.style.transition="none";
+    try{ sheet.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  sheet.addEventListener("pointermove",e=>{ if(!st) return; dy=Math.max(0,e.clientY-st.y); sheet.style.transform=`translateY(${dy}px)`; });
+  const end=()=>{
+    if(!st) return;
+    const fast = dy/Math.max(1,Date.now()-st.t) > 0.6;
+    sheet.style.transition=""; sheet.style.transform="";
+    const close = dy>90 || (fast && dy>30);
+    st=null; dy=0;
+    if(close) closeSheet();
+  };
+  sheet.addEventListener("pointerup",end); sheet.addEventListener("pointercancel",end);
+})();
 
 function ensurePlace(p){
   if(p) return p;
@@ -471,15 +524,15 @@ function openBrandPicker(p){
     <p class="note">アイコンは App Store から取得しています。</p>`);
   const bind=()=>body.querySelectorAll("[data-b]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.b;
-    if(S.cards[k]&&S.cards[k].number){ finishPoint(p,k); } else openCardForm(p,k);
+    if(S.cards[k]){ finishPoint(p,k); } else openCardForm(p,k);
   });
   draw(); bind();
   ensureBrandIcons().then(ch=>{ if(ch && sheet.classList.contains("on") && $(".brandpick")){ draw(); bind(); } });
 }
 function cardFields(k){
   const c=S.cards[k]||{};
-  const f=c.format||"CODE128";
-  return `<label class="f">カード番号<input id="fNum" inputmode="numeric" autocomplete="off" value="${esc(c.number)}" placeholder="カード裏面・公式アプリに表示の番号"></label>
+  const f=c.format||BRANDS[k].format||"CODE128";
+  return `<label class="f">カード番号（空欄でもOK。空欄ならバーコードは出ません）<input id="fNum" inputmode="numeric" autocomplete="off" value="${esc(c.number)}" placeholder="カード裏面・公式アプリに表示の番号"></label>
     <label class="f">バーコードの形式<select id="fFmt">
       ${["CODE128","EAN13","ITF","codabar","CODE39"].map(x=>`<option ${x===f?"selected":""}>${x}</option>`).join("")}
     </select></label>
@@ -488,7 +541,6 @@ function cardFields(k){
 }
 function readCard(k){
   const num=$("#fNum").value.replace(/\s|-/g,"");
-  if(!num){ toast("カード番号を入力してください"); return false; }
   S.cards[k]={number:num, format:$("#fFmt").value};
   S.brandUrls[k]=$("#fUrl").value.trim();
   return true;
@@ -509,8 +561,8 @@ function openAppPicker(p){
   if(pl && pl.apps.length>=3){ toast("アプリは3つまでです"); return; }
   openSheet(`<h2>アプリを選ぶ</h2>
     <button class="btn sub" id="newApp">＋ 新しいアプリを登録</button>
-    <div class="results">${S.apps.filter(a=>!used.includes(a.id)).map(a=>`<button class="row" data-a="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(linkLabel(a.url, a.name, a.storeId))}</small></span></button>`).join("") || '<p class="note" style="text-align:center">登録済みのアプリはまだありません</p>'}</div>`);
-  $("#newApp").onclick=()=>openAppForm(null, a=>addApp(p,a.id));
+    <div class="results">${S.apps.filter(a=>!used.includes(a.id)).map(a=>`<button class="row" data-a="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(linkLabel(a.url, a.name, a.storeId))}</small></span></button>`).join("") || '<p class="note" style="text-align:center">登録済みのアプリはまだありません</p>'}</div>`, "app");
+  $("#newApp").onclick=()=>openAppForm(null, a=>addApp(p,a.id), ()=>openAppPicker(p));
   body.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>addApp(p,b.dataset.a));
 }
 function addApp(p,id){
@@ -518,7 +570,7 @@ function addApp(p,id){
   if(pl.apps.length>=3){ toast("アプリは3つまでです"); return; }
   pl.apps.push(id); save(); closeSheet(); render();
 }
-function openAppForm(app, done){
+function openAppForm(app, done, back){
   const a = app ? {...app} : {id:uid(), name:"", icon:"", url:""};
   openSheet(`<h2>${app?"アプリを編集":"アプリを登録"}</h2>
     <div class="bar"><input id="q" placeholder="App Storeで検索（例: スタバ）" value=""><button class="btn" id="go" style="flex:none;width:auto;padding:10px 16px">検索</button></div>
@@ -527,8 +579,8 @@ function openAppForm(app, done){
     <label class="f">表示名<input id="aName" value="${esc(a.name)}"></label>
     <label class="f">起動リンク（空欄でOK）<input id="aUrl" autocomplete="off" value="${esc(a.url)}" placeholder="空欄: App Storeのページを開く"></label>
     <p class="note">空欄のときは、App Storeで選んだアプリならそのページが開きます（「開く」を押すと起動）。App Storeで選ばなかった場合は、表示名と同じ名前のショートカットを実行します。アプリのURLスキームが分かる場合は、ここに入力してください。</p>
-    <button class="btn" id="ok">保存</button>
-    ${app?'<button class="btn danger" id="delApp">このアプリを削除</button>':""}`);
+    <div class="bar"><button class="btn sub" id="cancel">キャンセル</button><button class="btn" id="ok">保存</button></div>
+    ${app?'<button class="btn danger" id="delApp">このアプリを削除</button>':""}`, "app");
   const search=async()=>{
     const q=$("#q").value.trim(); if(!q) return;
     $("#res").innerHTML='<p class="note">検索中…</p>';
@@ -544,6 +596,7 @@ function openAppForm(app, done){
     }catch(e){ $("#res").innerHTML='<p class="note">App Storeに接続できませんでした。名前だけでも登録できます</p>'; }
   };
   $("#go").onclick=search;
+  $("#cancel").onclick=()=>{ if(back) back(); else closeSheet(); };
   const delBtn=$("#delApp");
   if(delBtn) delBtn.onclick=async()=>{
     const n=S.places.filter(p=>p.apps.includes(a.id)).length;
@@ -563,12 +616,12 @@ function openAppForm(app, done){
   };
 }
 
-/* 長押し → 編集 */
+/* 修正（名前・カード・位置） */
 function openEdit(p, item){
   let mid="";
   if(item.kind==="point") mid=`<h2 style="margin-top:4px">${esc(BRANDS[p.point].name)}</h2>${cardFields(p.point)}`;
   else if(item.kind==="app"){ const a=S.apps.find(x=>x.id===item.id); mid=`<div class="row">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(linkLabel(a.url, a.name, a.storeId))}</small></span></div><button class="btn sub" id="editApp">アプリの名前・アイコン・リンクを編集</button>`; }
-  openSheet(`<h2>編集</h2>
+  openSheet(`<h2>修正</h2>
     <label class="f">場所の名前<input id="pName" value="${esc(p.name)}"></label>
     ${mid}
     <div class="bar">
@@ -579,17 +632,90 @@ function openEdit(p, item){
     <button class="btn danger" id="delPlace">この場所を削除</button>`);
   const commit=()=>{
     p.name=$("#pName").value.trim()||p.name;
-    if(item.kind==="point" && !readCard(p.point)) return false;
+    if(item.kind==="point") readCard(p.point);
     save(); return true;
   };
   $("#ok").onclick=()=>{ if(commit()){ closeSheet(); render(); } };
   $("#adjust").onclick=()=>{ if(commit()){ closeSheet(); openMap(p); } };
-  if(item.kind==="app") $("#editApp").onclick=()=>openAppForm(S.apps.find(x=>x.id===item.id), ()=>{ closeSheet(); render(); });
+  if(item.kind==="app") $("#editApp").onclick=()=>openAppForm(S.apps.find(x=>x.id===item.id), ()=>{ render(); openAppManager(); }, openAppManager);
   $("#delPlace").onclick=async()=>{
     if(await ask(`「${p.name}」を削除しますか？`, "削除")){
       S.places=S.places.filter(x=>x.id!==p.id); save(); sortPlaces(); mode="empty"; idx=0; editing=false; closeSheet(); locate(true);
     }
   };
+}
+
+/* 場所の行を左右にスワイプ（右: 編集 / 左: 削除） */
+function swipeRow(el, {onTap,onEdit,onDel}){
+  const row=el.querySelector(".row"), W=88;
+  let st=null, dx=0, moved=false, open=0, dragged=false;
+  const setX=x=>{ row.style.transform = x ? `translateX(${x}px)` : ""; };
+  el.close=()=>{ open=0; setX(0); };
+  row.addEventListener("pointerdown",e=>{
+    body.querySelectorAll(".swipe").forEach(o=>{ if(o!==el && o.close) o.close(); });
+    st={x:e.clientX,y:e.clientY,open}; moved=false; dragged=false; row.style.transition="none";
+  });
+  row.addEventListener("pointermove",e=>{
+    if(!st) return;
+    const mx=e.clientX-st.x, my=e.clientY-st.y;
+    if(!moved){
+      if(Math.abs(mx)>8 && Math.abs(mx)>Math.abs(my)){ moved=true; dragged=true; try{ row.setPointerCapture(e.pointerId); }catch(_){} }
+      else if(Math.abs(my)>8){ row.style.transition=""; st=null; dragged=true; return; }
+    }
+    if(moved){ dx=Math.max(-W,Math.min(W,st.open+mx)); setX(dx); }
+  });
+  const end=()=>{
+    if(!st) return;
+    row.style.transition="";
+    if(moved){ open = dx>W/2 ? W : dx<-W/2 ? -W : 0; setX(open); }
+    st=null;
+  };
+  row.addEventListener("pointerup",end); row.addEventListener("pointercancel",end);
+  row.addEventListener("click",()=>{
+    if(dragged){ dragged=false; return; }
+    if(open!==0){ el.close(); return; }
+    onTap();
+  });
+  el.querySelector(".act-edit").onclick=onEdit;
+  el.querySelector(".act-del").onclick=onDel;
+}
+
+/* 一覧を長押ししてドラッグで並べ替え */
+let sorting=false;
+document.addEventListener("touchmove",e=>{ if(sorting) e.preventDefault(); },{passive:false});
+function sortableList(box, {onTap,onMove}){
+  const rows=()=>[...box.querySelectorAll(".row")];
+  rows().forEach(row=>{
+    let st=null, timer=null, drag=false, handled=false;
+    row.addEventListener("pointerdown",e=>{
+      st={x:e.clientX,y:e.clientY}; drag=false; handled=false;
+      timer=setTimeout(()=>{ drag=true; sorting=true; row.classList.add("lift"); if(navigator.vibrate) navigator.vibrate(15); try{ row.setPointerCapture(e.pointerId); }catch(_){} },450);
+    });
+    row.addEventListener("pointermove",e=>{
+      if(!st) return;
+      const dy=e.clientY-st.y;
+      if(!drag){ if(Math.hypot(e.clientX-st.x,dy)>8){ clearTimeout(timer); st=null; } return; }
+      row.style.transform=`translateY(${dy}px)`;
+    });
+    const end=e=>{
+      clearTimeout(timer);
+      if(!st) return;
+      if(drag){
+        handled=true; sorting=false;
+        const others=rows().filter(r=>r!==row);
+        const before=others.find(r=>{ const b=r.getBoundingClientRect(); return e.clientY < b.top+b.height/2; });
+        const ids=others.map(r=>r.dataset.m);
+        const at = before ? ids.indexOf(before.dataset.m) : ids.length;
+        ids.splice(at,0,row.dataset.m);
+        row.classList.remove("lift"); row.style.transform="";
+        onMove(ids);
+      }
+      st=null; drag=false;
+    };
+    row.addEventListener("pointerup",end); row.addEventListener("pointercancel",end);
+    row.addEventListener("click",()=>{ if(handled){ handled=false; return; } onTap(row); });
+    row.addEventListener("contextmenu",e=>e.preventDefault());
+  });
 }
 
 /* 一覧メニュー */
@@ -598,13 +724,15 @@ function openMenu(){
   const cur=current();
   openSheet(`<h2>登録した場所</h2>
     <button class="btn" id="newPlace">＋ 現在地を新規登録</button>
-    ${order.map((p,i)=>{
+    <div id="plList" style="display:flex;flex-direction:column;gap:8px">${order.map((p,i)=>{
       const d=pos?dist(pos,p):null;
-      const ic=p.point?brandIcon(p.point):(p.apps[0]?appIcon(S.apps.find(a=>a.id===p.apps[0])||{}):'<div class="ph">・</div>');
       const sub=[p.point?BRANDS[p.point].short:null, p.apps.length?`アプリ${p.apps.length}`:null].filter(Boolean).join(" ・ ")||"未設定";
-      return `<button class="row ${cur&&cur.id===p.id?"cur":""}" data-i="${i}">${ic}<span class="t"><b>${esc(p.name)}</b><small>${sub}</small></span><small style="color:var(--muted);font-variant-numeric:tabular-nums">${fmtDist(d)}</small></button>`;
-    }).join("") || '<p class="note" style="text-align:center">まだ登録がありません</p>'}
-    <button class="btn sub" id="mgApps">登録したアプリの管理（名前の変更・削除）</button>
+      return `<div class="swipe ${cur&&cur.id===p.id?"cur":""}" data-i="${i}">
+        <button class="act act-edit">編集</button><button class="act act-del">削除</button>
+        <div class="row" role="button"><div class="pin">${PIN}</div><span class="t"><b>${esc(p.name)}</b><small>${sub}</small></span><small style="color:var(--muted);font-variant-numeric:tabular-nums">${fmtDist(d)}</small></div></div>`;
+    }).join("") || '<p class="note" style="text-align:center">まだ登録がありません</p>'}</div>
+    ${order.length?'<p class="note" style="text-align:center">右にスワイプで編集、左にスワイプで削除</p>':""}
+    <button class="btn dk" id="mgApps">登録したアプリの管理（名前の変更・削除・並べ替え）</button>
     <details><summary class="note">データのバックアップ</summary>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
         <textarea id="dump" rows="4"></textarea>
@@ -613,7 +741,21 @@ function openMenu(){
     <p class="note" style="text-align:center">バージョン ${VERSION}</p>`);
   $("#newPlace").onclick=()=>{ mode="empty"; closeSheet(); render(); openAdd(null); };
   $("#mgApps").onclick=openAppManager;
-  body.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>{ mode="place"; idx=+b.dataset.i; closeSheet(); render(); });
+  body.querySelectorAll(".swipe").forEach(el=>{
+    const i=+el.dataset.i, p=order[i];
+    swipeRow(el,{
+      onTap:()=>{ mode="place"; idx=i; editing=false; closeSheet(); render(); },
+      onEdit:()=>{ mode="place"; idx=i; closeSheet(); editing=true; render(); },
+      onDel:async()=>{
+        if(!(await ask(`「${p.name}」を削除しますか？`, "削除"))){ el.close(); return; }
+        const curId=current()?.id;
+        S.places=S.places.filter(x=>x.id!==p.id); save(); sortPlaces();
+        const ni=order.findIndex(x=>x.id===curId);
+        if(ni>=0) idx=ni; else { mode="empty"; idx=0; }
+        editing=false; render(); openMenu();
+      }
+    });
+  });
   $("#exp").onclick=async()=>{ const t=JSON.stringify(S); $("#dump").value=t; try{await navigator.clipboard.writeText(t); toast("コピーしました");}catch(e){ $("#dump").select(); } };
   $("#imp").onclick=async()=>{
     try{ const d=JSON.parse($("#dump").value); if(!Array.isArray(d.places)) throw 0;
@@ -626,14 +768,17 @@ function openMenu(){
 function openAppManager(){
   openSheet(`<h2>登録したアプリ</h2>
     <button class="btn" id="mgNew">＋ アプリを新規登録</button>
-    <div class="results" style="max-height:none">${S.apps.map(a=>{
+    <p class="note" style="text-align:center">タップで編集、長押ししてドラッグで並べ替え</p>
+    <div class="results sortable" id="mgList" style="max-height:none">${S.apps.map(a=>{
       const n=S.places.filter(p=>p.apps.includes(a.id)).length;
-      return `<button class="row" data-m="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${n}か所で使用 ・ ${esc(linkLabel(a.url,a.name,a.storeId))}</small></span></button>`;
+      return `<div class="row" role="button" data-m="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${n}か所で使用 ・ ${esc(linkLabel(a.url,a.name,a.storeId))}</small></span></div>`;
     }).join("") || '<p class="note" style="text-align:center">登録したアプリはまだありません</p>'}</div>
-    <button class="btn sub" id="mgBack">戻る</button>`);
-  $("#mgNew").onclick=()=>openAppForm(null, ()=>openAppManager());
-  body.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>
-    openAppForm(S.apps.find(a=>a.id===b.dataset.m), ()=>{ render(); openAppManager(); }));
+    <button class="btn sub" id="mgBack">戻る</button>`, "app");
+  $("#mgNew").onclick=()=>openAppForm(null, ()=>openAppManager(), openAppManager);
+  sortableList($("#mgList"),{
+    onTap:row=>openAppForm(S.apps.find(a=>a.id===row.dataset.m), ()=>{ render(); openAppManager(); }, openAppManager),
+    onMove:ids=>{ S.apps=ids.map(id=>S.apps.find(a=>a.id===id)).filter(Boolean); save(); openAppManager(); }
+  });
   $("#mgBack").onclick=openMenu;
 }
 
@@ -703,9 +848,26 @@ stage.addEventListener("touchend",e=>{
 });
 document.getElementById("btnRefresh").onclick=()=>locate(false);
 document.getElementById("btnMenu").onclick=openMenu;
-document.getElementById("ebAdjust").onclick=()=>{ const p=current(); if(p) openMap(p); };
-document.getElementById("ebDetail").onclick=()=>{ const p=current(); if(p) openEdit(p,{kind:"place"}); };
-document.getElementById("ebDone").onclick=()=>{ editing=false; render(); };
+function commitName(){
+  const p=current(), ni=document.getElementById("nameEdit");
+  if(p && ni && ni.value.trim()){ p.name=ni.value.trim(); save(); }
+}
+document.getElementById("ebDetail").onclick=()=>{ commitName(); const p=current(); if(p) openEdit(p,{kind:"place"}); };
+document.getElementById("ebDone").onclick=()=>{ commitName(); editing=false; render(); };
+
+/* 背景の長押しでも編集状態に入る */
+let bgSt=null;
+stage.addEventListener("pointerdown",e=>{
+  if(!current() || editing) return;
+  if(e.target.closest("button,.app-tile,input")) return;
+  bgSt={x:e.clientX,y:e.clientY};
+  clearTimeout(pressTimer);
+  pressTimer=setTimeout(()=>{ if(bgSt && document.visibilityState==="visible"){ if(navigator.vibrate) navigator.vibrate(15); enterEdit(); } },800);
+});
+stage.addEventListener("pointermove",e=>{
+  if(bgSt && Math.hypot(e.clientX-bgSt.x,e.clientY-bgSt.y)>10){ clearTimeout(pressTimer); bgSt=null; }
+});
+["pointerup","pointercancel"].forEach(t=>stage.addEventListener(t,()=>{ bgSt=null; }));
 
 /* ピンチ拡大を止める */
 ["gesturestart","gesturechange","gestureend"].forEach(t=>document.addEventListener(t,e=>e.preventDefault()));
