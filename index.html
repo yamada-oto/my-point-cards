@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ポイント">
+<title>店舗ポイントカード</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<style>
+/* レイアウト: 1画面アプリ。上にカード、下に四隅の小さな操作ボタン */
+:root{
+  --bg:#f3f4f6; --surface:#ffffff; --fg:#1b1d22; --muted:#6b7079; --line:#dfe2e7;
+  --accent:#2f6fde; --danger:#d64545; --overlay:rgba(16,18,24,.45);
+  --font:"Noto Sans JP",-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121418; --surface:#1d2027; --fg:#eceef2; --muted:#9aa0aa; --line:#2e323b;
+  --accent:#6b9bff; --danger:#ff6b6b; --overlay:rgba(0,0,0,.6); color-scheme:dark}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;width:100%;-webkit-user-select:text;user-select:text}
+#stage{position:fixed;inset:0;padding:calc(var(--sat) + 14px) max(16px,var(--sar)) calc(var(--sab) + 72px) max(16px,var(--sal));
+  overflow-y:auto;display:flex;flex-direction:column;align-items:center}
+.wrap{width:100%;max-width:440px;display:flex;flex-direction:column;gap:14px}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:0 2px}
+.head h1{font-size:17px;font-weight:700;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.head .dist{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ポイントカード: 上2/3がカードの絵柄、下がバーコード */
+.card{position:relative;border-radius:16px;overflow:hidden;background:var(--surface);
+  box-shadow:0 6px 20px rgba(0,0,0,.12)}
+.card-art{position:relative;aspect-ratio:1.586/0.92;max-width:100%;padding:16px;color:#fff;
+  background:var(--brand-bg);display:flex;flex-direction:column;justify-content:space-between}
+.card-art::after{content:"";position:absolute;inset:0;background:var(--brand-pattern);pointer-events:none}
+.card-art>*{position:relative;z-index:1}
+.launch{display:flex;align-items:center;gap:10px;text-align:left;align-self:flex-start;
+  background:rgba(255,255,255,.18);border-radius:14px;padding:8px 14px 8px 8px;touch-action:none}
+.launch img,.launch .ph{width:40px;height:40px;border-radius:10px;background:#fff;flex:none;object-fit:cover}
+.launch .ph{display:grid;place-items:center;color:#333;font-weight:700}
+.launch b{display:block;font-size:15px}
+.launch small{display:block;font-size:11px;opacity:.85}
+.brandmark{font-size:26px;font-weight:700;letter-spacing:.02em;line-height:1.1}
+.brandmark small{display:block;font-size:11px;font-weight:500;opacity:.85;letter-spacing:.08em}
+.code-panel{background:#fff;padding:12px 14px 10px;text-align:center;color:#111}
+.code-panel svg{width:100%;height:84px;display:block}
+.code-panel .num{font-size:12px;letter-spacing:.12em;font-variant-numeric:tabular-nums;color:#444;margin-top:4px}
+.code-panel .hint{font-size:10px;color:#888;margin-top:2px}
+.x{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;
+  background:rgba(0,0,0,.45);color:#fff;font-size:14px;line-height:26px;text-align:center;z-index:3}
+
+/* アプリリンク: 3つまで横並び */
+.apps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.app-tile{position:relative;background:var(--surface);border-radius:16px;padding:14px 6px 10px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none;
+  box-shadow:0 2px 8px rgba(0,0,0,.07);transition:transform .12s}
+.app-tile img,.app-tile .ph{width:54px;height:54px;border-radius:13px;object-fit:cover;background:var(--line)}
+.app-tile .ph{display:grid;place-items:center;font-weight:700;color:var(--muted);font-size:20px}
+.app-tile span{font-size:11px;text-align:center;line-height:1.3;max-width:100%;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.app-tile .x{top:4px;right:4px;width:22px;height:22px;line-height:22px;font-size:12px}
+.app-tile.dragging{z-index:10;box-shadow:0 10px 24px rgba(0,0,0,.25);pointer-events:none}
+.app-tile.drop{outline:2px dashed var(--accent);outline-offset:2px}
+.plus{align-self:center;width:56px;height:56px;border-radius:50%;background:var(--surface);
+  border:1.5px dashed var(--muted);font-size:28px;color:var(--muted);line-height:1}
+
+/* 未登録時 */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  text-align:center;color:var(--muted);min-height:60vh}
+.empty .big{width:96px;height:96px;border-radius:50%;background:var(--accent);color:#fff;font-size:52px;
+  line-height:1;box-shadow:0 8px 24px rgba(47,111,222,.35)}
+.empty p{margin:0;font-size:13px;line-height:1.7}
+
+/* 四隅の操作 */
+.corner{position:fixed;bottom:calc(var(--sab) + 16px);width:44px;height:44px;border-radius:12px;
+  background:var(--surface);box-shadow:0 2px 10px rgba(0,0,0,.12);display:grid;place-items:center;z-index:20}
+#btnRefresh{left:max(16px,calc(var(--sal) + 16px))}
+#btnMenu{right:max(16px,calc(var(--sar) + 16px))}
+.corner svg{width:20px;height:20px;stroke:var(--fg);fill:none;stroke-width:2;stroke-linecap:round}
+#btnRefresh.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.edge{position:fixed;top:50%;transform:translateY(-50%);width:28px;height:64px;z-index:15;
+  background:var(--surface);color:var(--muted);font-size:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+#btnNext{right:var(--sar);border-radius:12px 0 0 12px}
+#btnPrev{left:var(--sal);border-radius:0 12px 12px 0}
+
+/* シート */
+.scrim{position:fixed;inset:0;background:var(--overlay);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--surface);border-radius:20px 20px 0 0;
+  max-height:86vh;overflow-y:auto;transform:translateY(105%);transition:transform .25s ease;
+  padding:10px max(16px,var(--sar)) calc(var(--sab) + 20px) max(16px,var(--sal))}
+.sheet.on{transform:none}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
+.sheet h2{font-size:16px;margin:0 0 14px;text-align:center}
+.sheet .inner{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.choice{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.choice button,.brandpick button{background:var(--bg);border-radius:16px;padding:18px 8px;display:flex;
+  flex-direction:column;align-items:center;gap:8px;font-weight:500}
+.choice svg{width:34px;height:34px;stroke:var(--accent);fill:none;stroke-width:1.8}
+.brandpick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.brandpick img,.brandpick .ph{width:56px;height:56px;border-radius:14px;object-fit:cover}
+.brandpick .ph{display:grid;place-items:center;color:#fff;font-weight:700}
+.brandpick span{font-size:12px}
+.row{display:flex;align-items:center;gap:12px;padding:10px;border-radius:12px;background:var(--bg);text-align:left;width:100%}
+.row img,.row .ph{width:40px;height:40px;border-radius:10px;object-fit:cover;flex:none}
+.row .ph{display:grid;place-items:center;background:var(--line);color:var(--muted);font-weight:700}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .t small{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.row.cur{outline:2px solid var(--accent)}
+.btn{background:var(--accent);color:#fff;border-radius:12px;padding:12px;font-weight:700;text-align:center;width:100%}
+.btn.sub{background:var(--bg);color:var(--fg)}
+.btn.danger{background:none;color:var(--danger);border:1px solid var(--danger)}
+label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+.note{font-size:12px;color:var(--muted);line-height:1.6;margin:0}
+.bar{display:flex;gap:10px;align-items:center}
+.bar>*{flex:1}
+.loc-btn{flex:none;width:auto;padding:12px 14px;display:flex;gap:6px;align-items:center}
+.loc-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
+.results{display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto}
+
+/* 明るい表示 */
+#bright{position:fixed;inset:0;background:#fff;z-index:60;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:24px;color:#111}
+#bright svg{width:100%;max-width:560px;height:160px}
+#bright .num{font-size:18px;letter-spacing:.14em;font-variant-numeric:tabular-nums;margin-top:10px}
+#bright p{font-size:12px;color:#888;margin-top:24px}
+
+/* 地図 */
+#mapView{position:fixed;inset:0;z-index:55;background:var(--bg);display:flex;flex-direction:column}
+#map{flex:1}
+#mapView .ctl{background:var(--surface);padding:14px max(16px,var(--sar)) calc(var(--sab) + 14px) max(16px,var(--sal));
+  display:flex;flex-direction:column;gap:12px}
+#mapView .ctl .r{display:flex;justify-content:space-between;font-size:13px;font-variant-numeric:tabular-nums}
+input[type=range]{padding:0;border:0;background:none}
+
+/* 確認 */
+#confirm{position:fixed;inset:0;z-index:70;background:var(--overlay);display:grid;place-items:center;padding:24px}
+#confirm .box{background:var(--surface);border-radius:16px;padding:20px;max-width:320px;width:100%;display:flex;flex-direction:column;gap:14px}
+#confirm p{margin:0;line-height:1.6;text-align:center}
+#toast{position:fixed;left:50%;bottom:calc(var(--sab) + 76px);transform:translateX(-50%);z-index:80;
+  background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:20px;font-size:13px;opacity:0;
+  transition:opacity .2s;pointer-events:none;max-width:86vw;text-align:center}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<button class="corner" id="btnRefresh" aria-label="位置情報を更新">
+  <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+</button>
+<button class="corner" id="btnMenu" aria-label="登録一覧">
+  <svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14"/></svg>
+</button>
+<button class="edge" id="btnNext" aria-label="次に近い場所" hidden>›</button>
+<button class="edge" id="btnPrev" aria-label="前の場所" hidden>‹</button>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="inner" id="sheetBody"></div></div>
+<div id="toast" role="status"></div>
+
+<script>
+/* ===== データ ===== */
+const BRANDS = {
+  rakuten:{name:"楽天ポイントカード", short:"楽天ポイント", term:"楽天ポイントカード",
+    bg:"linear-gradient(135deg,#d0021b 0%,#8f0012 100%)", color:"#bf0000"},
+  vpoint:{name:"Vポイント", short:"Vポイント", term:"Vポイントアプリ",
+    bg:"linear-gradient(135deg,#0b2a6f 0%,#16469e 70%,#f2c200 160%)", color:"#0b2a6f"},
+  ponta:{name:"Ponta", short:"Ponta", term:"Ponta ポイント",
+    bg:"linear-gradient(135deg,#f7a400 0%,#e66a00 100%)", color:"#f08c00"}
+};
+const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
+const KEY = "pointBarcodeApp.v1";
+const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
+let S;
+try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = blank(); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast("保存できませんでした"); } }
+const uid = () => Math.random().toString(36).slice(2,10);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ===== 位置 ===== */
+let pos = null, order = [], idx = 0, mode = "empty"; // mode: place | empty
+function dist(a,b){
+  const R=6371000, r=x=>x*Math.PI/180;
+  const dLat=r(b.lat-a.lat), dLng=r(b.lng-a.lng);
+  const h=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+const fmtDist = m => m==null ? "" : m<1000 ? Math.round(m)+" m" : (m/1000).toFixed(1)+" km";
+function sortPlaces(){
+  order = S.places.slice();
+  if(pos) order.sort((a,b)=>dist(pos,a)-dist(pos,b));
+}
+function locate(auto){
+  const b = document.getElementById("btnRefresh");
+  if(!navigator.geolocation){ toast("この端末では位置情報が使えません"); render(); return; }
+  b.classList.add("spin");
+  navigator.geolocation.getCurrentPosition(p=>{
+    b.classList.remove("spin");
+    pos = {lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy};
+    const keepId = mode==="place" && !auto ? order[idx]?.id : null;
+    sortPlaces();
+    if(keepId){ idx = order.findIndex(x=>x.id===keepId); if(idx<0){idx=0;} }
+    else {
+      const near = order[0];
+      if(near && dist(pos,near) <= near.radius){ mode="place"; idx=0; }
+      else { mode="empty"; idx=0; }
+    }
+    render();
+    if(!auto) toast("位置情報を更新しました（誤差 約"+Math.round(pos.acc)+"m）");
+  }, err=>{
+    b.classList.remove("spin");
+    toast(err.code===1 ? "位置情報の利用が許可されていません。設定で許可してください" : "位置情報を取得できませんでした");
+    sortPlaces(); render();
+  }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
+}
+
+/* ===== アイコン（App Store 検索） ===== */
+function itunes(term){
+  return new Promise((res,rej)=>{
+    const cb = "itcb"+Date.now()+Math.floor(Math.random()*1000);
+    const s = document.createElement("script");
+    const t = setTimeout(()=>{cleanup();rej(new Error("timeout"));},9000);
+    function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
+    window[cb] = d => { cleanup(); res(d.results||[]); };
+    s.onerror = () => { cleanup(); rej(new Error("network")); };
+    s.src = "https://itunes.apple.com/search?country=jp&entity=software&limit=8&term="+encodeURIComponent(term)+"&callback="+cb;
+    document.head.appendChild(s);
+  });
+}
+async function ensureBrandIcons(){
+  let changed = false;
+  for(const k of Object.keys(BRANDS)){
+    if(S.brandIcons[k]) continue;
+    try{ const r = await itunes(BRANDS[k].term); if(r[0]){ S.brandIcons[k]=r[0].artworkUrl100; changed=true; } }catch(e){}
+  }
+  if(changed){ save(); return true; }
+  return false;
+}
+const brandIcon = (k,cls="") => S.brandIcons[k]
+  ? `<img class="${cls}" src="${esc(S.brandIcons[k])}" alt="">`
+  : `<div class="ph ${cls}" style="background:${BRANDS[k].color};color:#fff">${esc(BRANDS[k].short[0])}</div>`;
+const appIcon = a => a.icon ? `<img src="${esc(a.icon)}" alt="">` : `<div class="ph">${esc((a.name||"?")[0])}</div>`;
+
+/* ===== 描画 ===== */
+const stage = document.getElementById("stage");
+function current(){ return mode==="place" ? order[idx] : null; }
+
+function render(){
+  const p = current();
+  const next = document.getElementById("btnNext"), prev = document.getElementById("btnPrev");
+  next.hidden = !(order.length && (mode==="empty" || idx < order.length-1));
+  prev.hidden = !(mode==="place" && idx>0);
+  if(!p){ stage.innerHTML = emptyView(); bindEmpty(); return; }
+  const d = pos ? dist(pos,p) : null;
+  const inRange = d!=null && d<=p.radius;
+  let html = `<div class="wrap">
+    <div class="head"><h1>${esc(p.name)}</h1><span class="dist">${d==null?"位置不明":(inRange?"範囲内 · ":"")+fmtDist(d)}</span></div>`;
+  if(p.point){
+    const b = BRANDS[p.point], c = S.cards[p.point]||{};
+    html += `<div class="card">
+      <div class="card-art" style="--brand-bg:${b.bg};--brand-pattern:${PATTERN}">
+        <button class="x" data-del-point aria-label="ポイントカードを削除">✕</button>
+        <button class="launch" id="pointLaunch">${brandIcon(p.point)}<span><b>${esc(b.short)}</b><small>アプリを開く</small></span></button>
+        <div class="brandmark"><small>POINT CARD</small>${esc(b.name)}</div>
+      </div>
+      <button class="code-panel" id="codePanel" style="width:100%;display:block">
+        <svg id="bc"></svg>
+        <div class="num">${esc(spaced(c.number))}</div>
+        <div class="hint">タップで明るく表示</div>
+      </button>
+    </div>`;
+  }
+  if(p.apps.length){
+    html += `<div class="apps" id="apps">` + p.apps.map(id=>{
+      const a = S.apps.find(x=>x.id===id); if(!a) return "";
+      return `<div class="app-tile" data-app="${a.id}" role="button" tabindex="0">
+        <button class="x" data-del-app="${a.id}" aria-label="${esc(a.name)}を外す">✕</button>
+        ${appIcon(a)}<span>${esc(a.name)}</span></div>`;
+    }).join("") + `</div>`;
+  }
+  if(p.apps.length < 3 || !p.point) html += `<button class="plus" id="plusBelow" aria-label="追加">＋</button>`;
+  html += `</div>`;
+  stage.innerHTML = html;
+  if(p.point) drawBarcode(document.getElementById("bc"), S.cards[p.point], 2, 84);
+  bindPlace(p);
+}
+const spaced = n => (n||"").replace(/(\d{4})(?=\d)/g,"$1 ");
+function drawBarcode(svg, card, w, h){
+  if(!card || !card.number){ svg.outerHTML = `<div class="note" style="padding:20px 0">カード番号が未設定です。長押しで設定</div>`; return; }
+  try{ JsBarcode(svg, card.number, {format:card.format||"CODE128", width:w, height:h, displayValue:false, margin:0, background:"#ffffff", lineColor:"#000000"}); }
+  catch(e){ svg.outerHTML = `<div class="note" style="padding:20px 0;color:#c33">この番号は ${esc(card.format)} で表示できません。長押しで形式を変更</div>`; }
+}
+function emptyView(){
+  const msg = !pos ? "位置情報を取得しています…<br>取得できない場合は左下のボタンで再取得"
+    : "この付近に登録した場所はありません<br>＋を押すと、ここを新しい場所として登録します";
+  return `<div class="empty"><button class="big" id="plusEmpty" aria-label="この場所を登録">＋</button><p>${msg}</p></div>`;
+}
+function bindEmpty(){ document.getElementById("plusEmpty").onclick = () => openAdd(null); }
+
+/* ===== 長押し・タップ・並べ替え ===== */
+function pressable(el, {tap, long, drag}){
+  let st=null, timer=null, longDone=false, dragging=false;
+  el.addEventListener("pointerdown", e=>{
+    if(e.target.closest(".x")) return;
+    st={x:e.clientX,y:e.clientY}; longDone=false; dragging=false;
+    timer=setTimeout(()=>{ longDone=true; if(navigator.vibrate) navigator.vibrate(15); long&&long(); }, 550);
+  });
+  el.addEventListener("pointermove", e=>{
+    if(!st) return;
+    const dx=e.clientX-st.x, dy=e.clientY-st.y;
+    if(!dragging && Math.hypot(dx,dy)>10){
+      clearTimeout(timer);
+      if(drag && !longDone){ dragging=true; el.setPointerCapture(e.pointerId); drag.start(); }
+    }
+    if(dragging) drag.move(e, dx, dy);
+  });
+  const end = e=>{
+    clearTimeout(timer);
+    if(!st) return;
+    if(dragging) drag.end(e);
+    else if(!longDone && e.type==="pointerup" && Math.hypot(e.clientX-st.x,e.clientY-st.y)<10) tap&&tap();
+    st=null; dragging=false;
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+  el.addEventListener("contextmenu", e=>e.preventDefault());
+  el.addEventListener("keydown", e=>{ if(e.key==="Enter") tap&&tap(); });
+}
+function launch(url){
+  if(!url){ toast("起動リンクが未設定です。長押しで設定できます"); return; }
+  location.href = url;
+}
+function bindPlace(p){
+  const pl = document.getElementById("pointLaunch");
+  if(pl) pressable(pl, {tap:()=>launch(S.brandUrls[p.point]), long:()=>openEdit(p,{kind:"point"})});
+  const cp = document.getElementById("codePanel");
+  if(cp) pressable(cp, {tap:()=>showBright(p.point), long:()=>openEdit(p,{kind:"point"})});
+  stage.querySelector("[data-del-point]")?.addEventListener("click", async ()=>{
+    if(await ask(`${BRANDS[p.point].name}をこの場所から削除しますか？`, "削除")){ p.point=null; save(); render(); }
+  });
+  stage.querySelectorAll("[data-del-app]").forEach(b=>b.addEventListener("click", async ()=>{
+    const a=S.apps.find(x=>x.id===b.dataset.delApp);
+    if(await ask(`${a?a.name:"このアプリ"}をこの場所から外しますか？`, "外す")){ p.apps=p.apps.filter(id=>id!==b.dataset.delApp); save(); render(); }
+  }));
+  stage.querySelectorAll(".app-tile").forEach(t=>{
+    const id=t.dataset.app, a=S.apps.find(x=>x.id===id);
+    let target=null;
+    pressable(t, {
+      tap:()=>launch(a.url),
+      long:()=>openEdit(p,{kind:"app", id}),
+      drag:{
+        start(){ t.classList.add("dragging"); },
+        move(e,dx,dy){
+          t.style.transform=`translate(${dx}px,${dy}px) scale(1.05)`;
+          const under=document.elementFromPoint(e.clientX,e.clientY)?.closest(".app-tile");
+          stage.querySelectorAll(".app-tile.drop").forEach(x=>x.classList.remove("drop"));
+          target = under && under!==t ? under : null;
+          target&&target.classList.add("drop");
+        },
+        end(){
+          t.classList.remove("dragging"); t.style.transform="";
+          if(target){
+            const i=p.apps.indexOf(id), j=p.apps.indexOf(target.dataset.app);
+            p.apps.splice(i,1); p.apps.splice(j,0,id); save();
+          }
+          render();
+        }
+      }
+    });
+  });
+  const pb=document.getElementById("plusBelow");
+  if(pb) pb.onclick = () => p.point ? openAppPicker(p) : openAdd(p);
+}
+
+/* ===== 明るい表示 ===== */
+let wakeLock=null;
+async function showBright(brand){
+  const card=S.cards[brand];
+  if(!card||!card.number){ toast("カード番号が未設定です。長押しで設定できます"); return; }
+  const d=document.createElement("div"); d.id="bright";
+  d.innerHTML=`<svg></svg><div class="num">${esc(spaced(card.number))}</div><p>タップで元に戻る</p>`;
+  document.body.appendChild(d);
+  drawBarcode(d.querySelector("svg"), card, 3, 160);
+  try{ wakeLock = await navigator.wakeLock?.request("screen"); }catch(e){}
+  d.onclick=()=>{ d.remove(); try{wakeLock&&wakeLock.release();}catch(e){} wakeLock=null; };
+}
+
+/* ===== シート ===== */
+const sheet=document.getElementById("sheet"), scrim=document.getElementById("scrim"), body=document.getElementById("sheetBody");
+function openSheet(html){ body.innerHTML=html; sheet.classList.add("on"); scrim.classList.add("on"); sheet.scrollTop=0; }
+function closeSheet(){ sheet.classList.remove("on"); scrim.classList.remove("on"); }
+scrim.onclick=closeSheet;
+const $ = s => body.querySelector(s);
+
+function ensurePlace(p){
+  if(p) return p;
+  if(!pos){ toast("位置情報が取得できていません。左下のボタンで更新してください"); return null; }
+  const np={id:uid(), name:"場所 "+(S.places.length+1), lat:pos.lat, lng:pos.lng, radius:100, point:null, apps:[], created:Date.now()};
+  S.places.push(np); save(); sortPlaces();
+  mode="place"; idx=order.findIndex(x=>x.id===np.id);
+  return np;
+}
+
+/* ＋ → アプリ / ポイント */
+function openAdd(p){
+  openSheet(`<h2>何を登録しますか</h2>
+    <div class="choice">
+      <button id="chApp"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>アプリ</button>
+      <button id="chPoint"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M10 10v4M12 10v4M15 10v4M17 10v4"/></svg>ポイント</button>
+    </div>
+    ${p&&p.point?'<p class="note">この場所にはポイントカードが登録済みです。ポイントを選ぶと差し替えます。</p>':""}`);
+  $("#chApp").onclick=()=>openAppPicker(p);
+  $("#chPoint").onclick=()=>openBrandPicker(p);
+}
+
+function openBrandPicker(p){
+  const draw=()=>openSheet(`<h2>ポイントカードを選ぶ</h2>
+    <div class="brandpick">${Object.keys(BRANDS).map(k=>`<button data-b="${k}">${brandIcon(k)}<span>${esc(BRANDS[k].short)}</span></button>`).join("")}</div>
+    <p class="note">アイコンは App Store から取得しています。</p>`);
+  const bind=()=>body.querySelectorAll("[data-b]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.b;
+    if(S.cards[k]&&S.cards[k].number){ finishPoint(p,k); } else openCardForm(p,k);
+  });
+  draw(); bind();
+  ensureBrandIcons().then(ch=>{ if(ch && sheet.classList.contains("on") && $(".brandpick")){ draw(); bind(); } });
+}
+function cardFields(k){
+  const c=S.cards[k]||{};
+  const f=c.format||"CODE128";
+  return `<label class="f">カード番号<input id="fNum" inputmode="numeric" autocomplete="off" value="${esc(c.number)}" placeholder="カード裏面・公式アプリに表示の番号"></label>
+    <label class="f">バーコードの形式<select id="fFmt">
+      ${["CODE128","EAN13","ITF","codabar","CODE39"].map(x=>`<option ${x===f?"selected":""}>${x}</option>`).join("")}
+    </select></label>
+    <label class="f">${esc(BRANDS[k].short)}アプリの起動リンク<input id="fUrl" autocomplete="off" value="${esc(S.brandUrls[k])}" placeholder="例: アプリのURLスキーム"></label>
+    <p class="note">店のレジで読めない場合は形式を変えて試してください。起動リンクは空欄でも登録できます。</p>`;
+}
+function readCard(k){
+  const num=$("#fNum").value.replace(/\s|-/g,"");
+  if(!num){ toast("カード番号を入力してください"); return false; }
+  S.cards[k]={number:num, format:$("#fFmt").value};
+  S.brandUrls[k]=$("#fUrl").value.trim();
+  return true;
+}
+function openCardForm(p,k){
+  openSheet(`<h2>${esc(BRANDS[k].name)}</h2>${cardFields(k)}<button class="btn" id="ok">登録</button>`);
+  $("#ok").onclick=()=>{ if(readCard(k)) finishPoint(p,k); };
+}
+function finishPoint(p,k){
+  const pl=ensurePlace(p); if(!pl) return;
+  if(!p && pos){ pl.lat=pos.lat; pl.lng=pos.lng; } // 登録時点の位置を記録
+  pl.point=k; save(); closeSheet(); render(); toast(BRANDS[k].short+"を登録しました");
+}
+
+/* アプリ選択 */
+function openAppPicker(p){
+  const pl=p, used=pl?pl.apps:[];
+  if(pl && pl.apps.length>=3){ toast("アプリは3つまでです"); return; }
+  openSheet(`<h2>アプリを選ぶ</h2>
+    <button class="btn sub" id="newApp">＋ 新しいアプリを登録</button>
+    <div class="results">${S.apps.filter(a=>!used.includes(a.id)).map(a=>`<button class="row" data-a="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${a.url?"起動リンクあり":"起動リンク未設定"}</small></span></button>`).join("") || '<p class="note" style="text-align:center">登録済みのアプリはまだありません</p>'}</div>`);
+  $("#newApp").onclick=()=>openAppForm(null, a=>addApp(p,a.id));
+  body.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>addApp(p,b.dataset.a));
+}
+function addApp(p,id){
+  const pl=ensurePlace(p); if(!pl) return;
+  if(pl.apps.length>=3){ toast("アプリは3つまでです"); return; }
+  pl.apps.push(id); save(); closeSheet(); render();
+}
+function openAppForm(app, done){
+  const a = app ? {...app} : {id:uid(), name:"", icon:"", url:""};
+  openSheet(`<h2>${app?"アプリを編集":"アプリを登録"}</h2>
+    <div class="bar"><input id="q" placeholder="App Storeで検索（例: スタバ）" value=""><button class="btn" id="go" style="flex:none;width:auto;padding:10px 16px">検索</button></div>
+    <div class="results" id="res"></div>
+    <div class="row" id="picked">${appIcon(a)}<span class="t"><b>${esc(a.name)||"未選択"}</b><small>アイコン</small></span></div>
+    <label class="f">表示名<input id="aName" value="${esc(a.name)}"></label>
+    <label class="f">起動リンク<input id="aUrl" autocomplete="off" value="${esc(a.url)}" placeholder="URLスキーム、またはショートカットのURL"></label>
+    <p class="note">アプリを直接開くには、そのアプリのURLスキームが必要です。分からない場合は「shortcuts://run-shortcut?name=名前」で、ショートカット経由で開くこともできます。</p>
+    <button class="btn" id="ok">保存</button>`);
+  const search=async()=>{
+    const q=$("#q").value.trim(); if(!q) return;
+    $("#res").innerHTML='<p class="note">検索中…</p>';
+    try{
+      const r=await itunes(q);
+      $("#res").innerHTML=r.map((x,i)=>`<button class="row" data-i="${i}"><img src="${esc(x.artworkUrl100)}" alt=""><span class="t"><b>${esc(x.trackName)}</b><small>${esc(x.sellerName||"")}</small></span></button>`).join("")||'<p class="note">見つかりませんでした</p>';
+      $("#res").querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>{
+        const x=r[b.dataset.i]; a.icon=x.artworkUrl100;
+        if(!$("#aName").value) $("#aName").value=x.trackName.split(/[-–—｜|:]/)[0].trim();
+        $("#picked").innerHTML=`${appIcon({...a,name:$("#aName").value})}<span class="t"><b>${esc(x.trackName)}</b><small>選択中</small></span>`;
+        $("#res").innerHTML="";
+      });
+    }catch(e){ $("#res").innerHTML='<p class="note">App Storeに接続できませんでした。名前だけでも登録できます</p>'; }
+  };
+  $("#go").onclick=search;
+  $("#q").addEventListener("keydown",e=>{ if(e.key==="Enter") search(); });
+  $("#ok").onclick=()=>{
+    a.name=$("#aName").value.trim(); a.url=$("#aUrl").value.trim();
+    if(!a.name){ toast("表示名を入力してください"); return; }
+    const i=S.apps.findIndex(x=>x.id===a.id);
+    if(i>=0) S.apps[i]=a; else S.apps.push(a);
+    save(); done&&done(a);
+  };
+}
+
+/* 長押し → 編集 */
+function openEdit(p, item){
+  let mid="";
+  if(item.kind==="point") mid=`<h2 style="margin-top:4px">${esc(BRANDS[p.point].name)}</h2>${cardFields(p.point)}`;
+  else { const a=S.apps.find(x=>x.id===item.id); mid=`<div class="row">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(a.url||"起動リンク未設定")}</small></span></div><button class="btn sub" id="editApp">アプリの名前・アイコン・リンクを編集</button>`; }
+  openSheet(`<h2>編集</h2>
+    <label class="f">場所の名前<input id="pName" value="${esc(p.name)}"></label>
+    ${mid}
+    <div class="bar">
+      <button class="btn sub loc-btn" id="adjust"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>位置を調整</button>
+      <button class="btn" id="ok">保存</button>
+    </div>
+    <p class="note">反応範囲 ${p.radius} m ・ 位置を調整で地図上のピンと範囲を変えられます</p>
+    <button class="btn danger" id="delPlace">この場所を削除</button>`);
+  const commit=()=>{
+    p.name=$("#pName").value.trim()||p.name;
+    if(item.kind==="point" && !readCard(p.point)) return false;
+    save(); return true;
+  };
+  $("#ok").onclick=()=>{ if(commit()){ closeSheet(); render(); } };
+  $("#adjust").onclick=()=>{ if(commit()){ closeSheet(); openMap(p); } };
+  if(item.kind==="app") $("#editApp").onclick=()=>openAppForm(S.apps.find(x=>x.id===item.id), ()=>{ closeSheet(); render(); });
+  $("#delPlace").onclick=async()=>{
+    if(await ask(`「${p.name}」を削除しますか？`, "削除")){
+      S.places=S.places.filter(x=>x.id!==p.id); save(); sortPlaces(); mode="empty"; idx=0; closeSheet(); locate(true);
+    }
+  };
+}
+
+/* 一覧メニュー */
+function openMenu(){
+  sortPlaces();
+  const cur=current();
+  openSheet(`<h2>登録した場所</h2>
+    <button class="btn" id="newPlace">＋ 現在地を新規登録</button>
+    ${order.map((p,i)=>{
+      const d=pos?dist(pos,p):null;
+      const ic=p.point?brandIcon(p.point):(p.apps[0]?appIcon(S.apps.find(a=>a.id===p.apps[0])||{}):'<div class="ph">・</div>');
+      const sub=[p.point?BRANDS[p.point].short:null, p.apps.length?`アプリ${p.apps.length}`:null].filter(Boolean).join(" ・ ")||"未設定";
+      return `<button class="row ${cur&&cur.id===p.id?"cur":""}" data-i="${i}">${ic}<span class="t"><b>${esc(p.name)}</b><small>${sub}</small></span><small style="color:var(--muted);font-variant-numeric:tabular-nums">${fmtDist(d)}</small></button>`;
+    }).join("") || '<p class="note" style="text-align:center">まだ登録がありません</p>'}
+    <details><summary class="note">データのバックアップ</summary>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <textarea id="dump" rows="4"></textarea>
+        <div class="bar"><button class="btn sub" id="exp">書き出し</button><button class="btn sub" id="imp">読み込み</button></div>
+      </div></details>`);
+  $("#newPlace").onclick=()=>{ mode="empty"; closeSheet(); render(); openAdd(null); };
+  body.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>{ mode="place"; idx=+b.dataset.i; closeSheet(); render(); });
+  $("#exp").onclick=async()=>{ const t=JSON.stringify(S); $("#dump").value=t; try{await navigator.clipboard.writeText(t); toast("コピーしました");}catch(e){ $("#dump").select(); } };
+  $("#imp").onclick=async()=>{
+    try{ const d=JSON.parse($("#dump").value); if(!Array.isArray(d.places)) throw 0;
+      if(await ask("今のデータを置き換えて読み込みますか？","読み込む")){ S=Object.assign(blank(),d); save(); closeSheet(); locate(true); }
+    }catch(e){ toast("読み込めない形式です"); }
+  };
+}
+
+/* 地図で位置調整 */
+function loadLeaflet(){
+  if(window.L) return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const l=document.createElement("link"); l.rel="stylesheet";
+    l.href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(l);
+    const s=document.createElement("script"); s.src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+    s.onload=res; s.onerror=rej; document.head.appendChild(s);
+  });
+}
+async function openMap(p){
+  const v=document.createElement("div"); v.id="mapView";
+  v.innerHTML=`<div id="map"></div><div class="ctl">
+    <div class="r"><span>反応範囲</span><b id="rv">${p.radius} m</b></div>
+    <input type="range" id="rr" min="20" max="500" step="10" value="${p.radius}">
+    <p class="note">ピンをドラッグして店の位置に合わせてください</p>
+    <div class="bar"><button class="btn sub" id="mc">キャンセル</button><button class="btn" id="ms">保存</button></div></div>`;
+  document.body.appendChild(v);
+  v.querySelector("#mc").onclick=()=>v.remove();
+  try{ await loadLeaflet(); }catch(e){ toast("地図を読み込めませんでした"); v.remove(); return; }
+  const m=L.map("map",{zoomControl:false}).setView([p.lat,p.lng],17);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(m);
+  const mk=L.marker([p.lat,p.lng],{draggable:true}).addTo(m);
+  const ci=L.circle([p.lat,p.lng],{radius:p.radius,color:"#2f6fde",weight:2,fillOpacity:.12}).addTo(m);
+  if(pos) L.circleMarker([pos.lat,pos.lng],{radius:6,color:"#fff",weight:2,fillColor:"#2f6fde",fillOpacity:1}).addTo(m);
+  mk.on("drag",e=>ci.setLatLng(e.target.getLatLng()));
+  m.on("click",e=>{ mk.setLatLng(e.latlng); ci.setLatLng(e.latlng); });
+  const rr=v.querySelector("#rr");
+  rr.oninput=()=>{ ci.setRadius(+rr.value); v.querySelector("#rv").textContent=rr.value+" m"; };
+  v.querySelector("#ms").onclick=()=>{
+    const ll=mk.getLatLng(); p.lat=ll.lat; p.lng=ll.lng; p.radius=+rr.value; save();
+    const id=p.id; sortPlaces(); idx=Math.max(0,order.findIndex(x=>x.id===id)); v.remove(); render(); toast("位置を保存しました");
+  };
+}
+
+/* 確認・通知 */
+function ask(msg, okLabel){
+  return new Promise(res=>{
+    const d=document.createElement("div"); d.id="confirm";
+    d.innerHTML=`<div class="box"><p>${esc(msg)}</p><div class="bar"><button class="btn sub" data-r="0">キャンセル</button><button class="btn" style="background:var(--danger)" data-r="1">${esc(okLabel)}</button></div></div>`;
+    document.body.appendChild(d);
+    d.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{ d.remove(); res(b.dataset.r==="1"); });
+  });
+}
+let tt; function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("on"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("on"),2600); }
+
+/* ===== 移動（＞とスワイプ） ===== */
+function go(step){
+  if(!order.length) return;
+  if(mode==="empty"){ if(step>0){ mode="place"; idx=0; } }
+  else { const n=idx+step; if(n<0||n>=order.length) return; idx=n; }
+  render();
+}
+document.getElementById("btnNext").onclick=()=>go(1);
+document.getElementById("btnPrev").onclick=()=>go(-1);
+let sx=null, sy=null;
+stage.addEventListener("touchstart",e=>{ if(e.target.closest(".app-tile,.launch")){sx=null;return;} sx=e.touches[0].clientX; sy=e.touches[0].clientY; },{passive:true});
+stage.addEventListener("touchend",e=>{
+  if(sx==null) return;
+  const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+  if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5) go(dx<0?1:-1);
+  sx=null;
+});
+document.getElementById("btnRefresh").onclick=()=>locate(false);
+document.getElementById("btnMenu").onclick=openMenu;
+
+/* 起動 */
+sortPlaces(); render(); locate(true);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") locate(true); });
+</script>
+</body>
+</html>
