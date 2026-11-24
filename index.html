@@ -147,8 +147,7 @@ label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--mu
 
 /* アプリ関連の画面は濃いグレー */
 .btn.dk{background:var(--dk);color:#fff}
-.sheet.app .btn:not(.sub):not(.danger){background:var(--dk);color:#fff}
-.sheet.app .grab::after{background:var(--dk)}
+.sheet.app{--surface:#4a505b; --bg:#3a3f48; --fg:#f2f3f5; --muted:#b9bec8; --line:#5f6672; --accent:#4d8bff; --danger:#ff7a7a; color:var(--fg)}
 
 /* 場所の行: 左右スワイプ */
 .swipe{position:relative;border-radius:12px;overflow:hidden;background:var(--bg)}
@@ -162,6 +161,8 @@ label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--mu
 
 /* アプリ一覧: 長押しで並べ替え */
 .sortable .row{touch-action:pan-y;cursor:grab}
+.pin-handle{background:none;border:0;cursor:grab}
+.pin-handle svg{display:block;overflow:visible}
 .row.lift{position:relative;z-index:5;transition:none;box-shadow:0 8px 20px rgba(0,0,0,.25)}
 
 /* 編集中の場所名 */
@@ -226,7 +227,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.25-9";
+const VERSION = "2026.11.25-10";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
@@ -732,7 +733,8 @@ function openMenu(){
         <div class="row" role="button"><div class="pin">${PIN}</div><span class="t"><b>${esc(p.name)}</b><small>${sub}</small></span><small style="color:var(--muted);font-variant-numeric:tabular-nums">${fmtDist(d)}</small></div></div>`;
     }).join("") || '<p class="note" style="text-align:center">まだ登録がありません</p>'}</div>
     ${order.length?'<p class="note" style="text-align:center">右にスワイプで編集、左にスワイプで削除</p>':""}
-    <button class="btn dk" id="mgApps">登録したアプリの管理（名前の変更・削除・並べ替え）</button>
+    <button class="btn dk" id="mgCards">ポイントカードの管理</button>
+    <button class="btn dk" id="mgApps">登録したアプリの管理</button>
     <details><summary class="note">データのバックアップ</summary>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
         <textarea id="dump" rows="4"></textarea>
@@ -741,11 +743,12 @@ function openMenu(){
     <p class="note" style="text-align:center">バージョン ${VERSION}</p>`);
   $("#newPlace").onclick=()=>{ mode="empty"; closeSheet(); render(); openAdd(null); };
   $("#mgApps").onclick=openAppManager;
+  $("#mgCards").onclick=openCardManager;
   body.querySelectorAll(".swipe").forEach(el=>{
     const i=+el.dataset.i, p=order[i];
     swipeRow(el,{
       onTap:()=>{ mode="place"; idx=i; editing=false; closeSheet(); render(); },
-      onEdit:()=>{ mode="place"; idx=i; closeSheet(); editing=true; render(); },
+      onEdit:()=>{ mode="place"; idx=i; editing=false; render(); openEdit(p,{kind:"place"}); },
       onDel:async()=>{
         if(!(await ask(`「${p.name}」を削除しますか？`, "削除"))){ el.close(); return; }
         const curId=current()?.id;
@@ -761,6 +764,34 @@ function openMenu(){
     try{ const d=JSON.parse($("#dump").value); if(!Array.isArray(d.places)) throw 0;
       if(await ask("今のデータを置き換えて読み込みますか？","読み込む")){ S=Object.assign(blank(),d); save(); closeSheet(); locate(true); }
     }catch(e){ toast("読み込めない形式です"); }
+  };
+}
+
+/* ポイントカードの管理 */
+function openCardManager(){
+  openSheet(`<h2>ポイントカード</h2>
+    <p class="note" style="text-align:center">カード番号・バーコードの形式・アプリの起動リンクを、まとめて直せます</p>
+    <div class="results" style="max-height:none">${Object.keys(BRANDS).map(k=>{
+      const c=S.cards[k], n=S.places.filter(pl=>pl.point===k).length;
+      const sub=(c ? (c.number ? "番号あり ・ "+(c.format||BRANDS[k].format||"CODE128") : "番号なし") : "未登録")+" ・ "+n+"か所で使用";
+      return `<button class="row" data-k="${k}">${brandIcon(k)}<span class="t"><b>${esc(BRANDS[k].name)}</b><small>${esc(sub)}</small></span></button>`;
+    }).join("")}</div>
+    <button class="btn sub" id="cmBack">戻る</button>`);
+  body.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>openCardEditor(b.dataset.k));
+  $("#cmBack").onclick=openMenu;
+  ensureBrandIcons().then(ch=>{ if(ch && sheet.classList.contains("on") && body.querySelector("[data-k]") && $("#cmBack")) openCardManager(); });
+}
+function openCardEditor(k){
+  openSheet(`<h2>${esc(BRANDS[k].name)}</h2>${cardFields(k)}
+    <div class="bar"><button class="btn sub" id="cancel">キャンセル</button><button class="btn" id="ok">保存</button></div>
+    ${S.cards[k]?'<button class="btn danger" id="delCard">このカード情報を削除</button>':""}`);
+  $("#cancel").onclick=openCardManager;
+  $("#ok").onclick=()=>{ readCard(k); save(); render(); toast("保存しました"); openCardManager(); };
+  const d=$("#delCard");
+  if(d) d.onclick=async()=>{
+    if(await ask(`${BRANDS[k].name}の番号とリンクの情報を削除しますか？（登録した場所のカードは残り、バーコードだけ出なくなります）`,"削除")){
+      delete S.cards[k]; delete S.brandUrls[k]; save(); render(); openCardManager();
+    }
   };
 }
 
@@ -797,14 +828,24 @@ async function openMap(p){
   v.innerHTML=`<div id="map"></div><div class="ctl">
     <div class="r"><span>反応範囲</span><b id="rv">${p.radius} m</b></div>
     <input type="range" id="rr" min="20" max="500" step="10" value="${p.radius}">
-    <p class="note">ピンをドラッグして店の位置に合わせてください</p>
+    <p class="note">青い丸（つまみ）をドラッグすると、その上の黒い点（ピンの先端）が動きます。地図をタップしても移動できます</p>
     <div class="bar"><button class="btn sub" id="mc">キャンセル</button><button class="btn" id="ms">保存</button></div></div>`;
   document.body.appendChild(v);
   v.querySelector("#mc").onclick=()=>v.remove();
   try{ await loadLeaflet(); }catch(e){ toast("地図を読み込めませんでした"); v.remove(); return; }
   const m=L.map("map",{zoomControl:false}).setView([p.lat,p.lng],17);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(m);
-  const mk=L.marker([p.lat,p.lng],{draggable:true}).addTo(m);
+  /* ピンの真下に大きなつまみ（84×150）を付ける。つまみを触っても、ピンの先端は指に隠れない */
+  const pinIcon=L.divIcon({className:"pin-handle",iconSize:[84,150],iconAnchor:[42,40],html:
+    `<svg width="84" height="150" viewBox="0 0 84 150" aria-hidden="true">
+      <path d="M42 40 C42 40 26 25 26 14 a16 16 0 0 1 32 0 C58 25 42 40 42 40Z" fill="#d64545" stroke="#fff" stroke-width="2"/>
+      <circle cx="42" cy="14" r="5.5" fill="#fff"/>
+      <circle cx="42" cy="40" r="3" fill="#111" stroke="#fff" stroke-width="1.5"/>
+      <line x1="42" y1="44" x2="42" y2="66" stroke="#2f6fde" stroke-width="3" stroke-dasharray="3 3"/>
+      <circle cx="42" cy="106" r="38" fill="rgba(47,111,222,.22)" stroke="#2f6fde" stroke-width="2.5"/>
+      <path d="M42 90v32M26 106h32" stroke="#2f6fde" stroke-width="3" stroke-linecap="round"/>
+    </svg>`});
+  const mk=L.marker([p.lat,p.lng],{draggable:true,icon:pinIcon}).addTo(m);
   const ci=L.circle([p.lat,p.lng],{radius:p.radius,color:"#2f6fde",weight:2,fillOpacity:.12}).addTo(m);
   if(pos) L.circleMarker([pos.lat,pos.lng],{radius:6,color:"#fff",weight:2,fillColor:"#2f6fde",fillOpacity:1}).addTo(m);
   mk.on("drag",e=>ci.setLatLng(e.target.getLatLng()));
