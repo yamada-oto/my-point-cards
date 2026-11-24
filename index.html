@@ -342,13 +342,15 @@ function pressable(el, {tap, long, drag}){
   el.addEventListener("contextmenu", e=>e.preventDefault());
   el.addEventListener("keydown", e=>{ if(e.key==="Enter") tap&&tap(); });
 }
-function launch(url){
-  if(!url){ toast("起動リンクが未設定です。長押しで設定できます"); return; }
-  location.href = url;
+/* 起動リンクが空のときは、同じ名前のショートカットを実行する */
+const defaultLink = name => "shortcuts://run-shortcut?name=" + encodeURIComponent(name);
+const linkLabel = (url, name) => url ? url : "ショートカット「" + name + "」を実行";
+function launch(url, name){
+  location.href = url || defaultLink(name);
 }
 function bindPlace(p){
   const pl = document.getElementById("pointLaunch");
-  if(pl) pressable(pl, {tap:()=>launch(S.brandUrls[p.point]), long:()=>openEdit(p,{kind:"point"})});
+  if(pl) pressable(pl, {tap:()=>launch(S.brandUrls[p.point], BRANDS[p.point].short), long:()=>openEdit(p,{kind:"point"})});
   const cp = document.getElementById("codePanel");
   if(cp) pressable(cp, {tap:()=>showBright(p.point), long:()=>openEdit(p,{kind:"point"})});
   stage.querySelector("[data-del-point]")?.addEventListener("click", async ()=>{
@@ -362,7 +364,7 @@ function bindPlace(p){
     const id=t.dataset.app, a=S.apps.find(x=>x.id===id);
     let target=null;
     pressable(t, {
-      tap:()=>launch(a.url),
+      tap:()=>launch(a.url, a.name),
       long:()=>openEdit(p,{kind:"app", id}),
       drag:{
         start(){ t.classList.add("dragging"); },
@@ -447,8 +449,8 @@ function cardFields(k){
     <label class="f">バーコードの形式<select id="fFmt">
       ${["CODE128","EAN13","ITF","codabar","CODE39"].map(x=>`<option ${x===f?"selected":""}>${x}</option>`).join("")}
     </select></label>
-    <label class="f">${esc(BRANDS[k].short)}アプリの起動リンク<input id="fUrl" autocomplete="off" value="${esc(S.brandUrls[k])}" placeholder="例: アプリのURLスキーム"></label>
-    <p class="note">店のレジで読めない場合は形式を変えて試してください。起動リンクは空欄でも登録できます。</p>`;
+    <label class="f">${esc(BRANDS[k].short)}アプリの起動リンク（空欄でOK）<input id="fUrl" autocomplete="off" value="${esc(S.brandUrls[k])}" placeholder="空欄: ショートカット「${esc(BRANDS[k].short)}」を実行"></label>
+    <p class="note">起動リンクが空欄のときは、iPhoneのショートカットアプリで「${esc(BRANDS[k].short)}」という名前のショートカット（「アプリを開く」を1つ入れるだけ）を作ると、そのアプリが開きます。店のレジで読めない場合は、バーコードの形式を変えて試してください。</p>`;
 }
 function readCard(k){
   const num=$("#fNum").value.replace(/\s|-/g,"");
@@ -473,7 +475,7 @@ function openAppPicker(p){
   if(pl && pl.apps.length>=3){ toast("アプリは3つまでです"); return; }
   openSheet(`<h2>アプリを選ぶ</h2>
     <button class="btn sub" id="newApp">＋ 新しいアプリを登録</button>
-    <div class="results">${S.apps.filter(a=>!used.includes(a.id)).map(a=>`<button class="row" data-a="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${a.url?"起動リンクあり":"起動リンク未設定"}</small></span></button>`).join("") || '<p class="note" style="text-align:center">登録済みのアプリはまだありません</p>'}</div>`);
+    <div class="results">${S.apps.filter(a=>!used.includes(a.id)).map(a=>`<button class="row" data-a="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(linkLabel(a.url, a.name))}</small></span></button>`).join("") || '<p class="note" style="text-align:center">登録済みのアプリはまだありません</p>'}</div>`);
   $("#newApp").onclick=()=>openAppForm(null, a=>addApp(p,a.id));
   body.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>addApp(p,b.dataset.a));
 }
@@ -489,8 +491,8 @@ function openAppForm(app, done){
     <div class="results" id="res"></div>
     <div class="row" id="picked">${appIcon(a)}<span class="t"><b>${esc(a.name)||"未選択"}</b><small>アイコン</small></span></div>
     <label class="f">表示名<input id="aName" value="${esc(a.name)}"></label>
-    <label class="f">起動リンク<input id="aUrl" autocomplete="off" value="${esc(a.url)}" placeholder="URLスキーム、またはショートカットのURL"></label>
-    <p class="note">アプリを直接開くには、そのアプリのURLスキームが必要です。分からない場合は「shortcuts://run-shortcut?name=名前」で、ショートカット経由で開くこともできます。</p>
+    <label class="f">起動リンク（空欄でOK）<input id="aUrl" autocomplete="off" value="${esc(a.url)}" placeholder="空欄: 表示名と同じ名前のショートカットを実行"></label>
+    <p class="note">空欄のときは、ショートカットアプリで「表示名」と同じ名前のショートカット（「アプリを開く」を1つ入れるだけ）を作っておくと、そのアプリが開きます。アプリのURLスキームが分かる場合だけ入力してください。</p>
     <button class="btn" id="ok">保存</button>`);
   const search=async()=>{
     const q=$("#q").value.trim(); if(!q) return;
@@ -521,7 +523,7 @@ function openAppForm(app, done){
 function openEdit(p, item){
   let mid="";
   if(item.kind==="point") mid=`<h2 style="margin-top:4px">${esc(BRANDS[p.point].name)}</h2>${cardFields(p.point)}`;
-  else { const a=S.apps.find(x=>x.id===item.id); mid=`<div class="row">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(a.url||"起動リンク未設定")}</small></span></div><button class="btn sub" id="editApp">アプリの名前・アイコン・リンクを編集</button>`; }
+  else { const a=S.apps.find(x=>x.id===item.id); mid=`<div class="row">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${esc(linkLabel(a.url, a.name))}</small></span></div><button class="btn sub" id="editApp">アプリの名前・アイコン・リンクを編集</button>`; }
   openSheet(`<h2>編集</h2>
     <label class="f">場所の名前<input id="pName" value="${esc(p.name)}"></label>
     ${mid}
