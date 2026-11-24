@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ポイント">
@@ -23,7 +23,7 @@
 @media (prefers-color-scheme:dark){:root{
   --bg:#121418; --surface:#1d2027; --fg:#eceef2; --muted:#9aa0aa; --line:#2e323b;
   --accent:#6b9bff; --danger:#ff6b6b; --overlay:rgba(0,0,0,.6); color-scheme:dark}}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:pan-x pan-y}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;overflow:hidden;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -144,7 +144,7 @@ label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--mu
 #mapView .ctl{background:var(--surface);padding:14px max(16px,var(--sar)) calc(var(--sab) + 14px) max(16px,var(--sal));
   display:flex;flex-direction:column;gap:12px}
 #mapView .ctl .r{display:flex;justify-content:space-between;font-size:13px;font-variant-numeric:tabular-nums}
-input[type=range]{padding:0;border:0;background:none}
+input[type=range]{padding:0;border:0;background:none;touch-action:none}
 
 /* 確認 */
 #confirm{position:fixed;inset:0;z-index:70;background:var(--overlay);display:grid;place-items:center;padding:24px}
@@ -186,6 +186,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
+const VERSION = "2026.11.25-3";
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = blank(); }
@@ -502,7 +503,8 @@ function openAppForm(app, done){
     <label class="f">表示名<input id="aName" value="${esc(a.name)}"></label>
     <label class="f">起動リンク（空欄でOK）<input id="aUrl" autocomplete="off" value="${esc(a.url)}" placeholder="空欄: 表示名と同じ名前のショートカットを実行"></label>
     <p class="note">空欄のときは、ショートカットアプリで「表示名」と同じ名前のショートカット（「アプリを開く」を1つ入れるだけ）を作っておくと、そのアプリが開きます。アプリのURLスキームが分かる場合だけ入力してください。</p>
-    <button class="btn" id="ok">保存</button>`);
+    <button class="btn" id="ok">保存</button>
+    ${app?'<button class="btn danger" id="delApp">このアプリを削除</button>':""}`);
   const search=async()=>{
     const q=$("#q").value.trim(); if(!q) return;
     $("#res").innerHTML='<p class="note">検索中…</p>';
@@ -518,6 +520,15 @@ function openAppForm(app, done){
     }catch(e){ $("#res").innerHTML='<p class="note">App Storeに接続できませんでした。名前だけでも登録できます</p>'; }
   };
   $("#go").onclick=search;
+  const delBtn=$("#delApp");
+  if(delBtn) delBtn.onclick=async()=>{
+    const n=S.places.filter(p=>p.apps.includes(a.id)).length;
+    if(await ask(`「${a.name}」を削除しますか？`+(n?`（${n}か所の登録からも外れます）`:""), "削除")){
+      S.apps=S.apps.filter(x=>x.id!==a.id);
+      S.places.forEach(p=>{ p.apps=p.apps.filter(id=>id!==a.id); });
+      save(); toast("削除しました"); done&&done(null);
+    }
+  };
   $("#q").addEventListener("keydown",e=>{ if(e.key==="Enter") search(); });
   $("#ok").onclick=()=>{
     a.name=$("#aName").value.trim(); a.url=$("#aUrl").value.trim();
@@ -569,12 +580,15 @@ function openMenu(){
       const sub=[p.point?BRANDS[p.point].short:null, p.apps.length?`アプリ${p.apps.length}`:null].filter(Boolean).join(" ・ ")||"未設定";
       return `<button class="row ${cur&&cur.id===p.id?"cur":""}" data-i="${i}">${ic}<span class="t"><b>${esc(p.name)}</b><small>${sub}</small></span><small style="color:var(--muted);font-variant-numeric:tabular-nums">${fmtDist(d)}</small></button>`;
     }).join("") || '<p class="note" style="text-align:center">まだ登録がありません</p>'}
+    <button class="btn sub" id="mgApps">登録したアプリの管理（名前の変更・削除）</button>
     <details><summary class="note">データのバックアップ</summary>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
         <textarea id="dump" rows="4"></textarea>
         <div class="bar"><button class="btn sub" id="exp">書き出し</button><button class="btn sub" id="imp">読み込み</button></div>
-      </div></details>`);
+      </div></details>
+    <p class="note" style="text-align:center">バージョン ${VERSION}</p>`);
   $("#newPlace").onclick=()=>{ mode="empty"; closeSheet(); render(); openAdd(null); };
+  $("#mgApps").onclick=openAppManager;
   body.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>{ mode="place"; idx=+b.dataset.i; closeSheet(); render(); });
   $("#exp").onclick=async()=>{ const t=JSON.stringify(S); $("#dump").value=t; try{await navigator.clipboard.writeText(t); toast("コピーしました");}catch(e){ $("#dump").select(); } };
   $("#imp").onclick=async()=>{
@@ -582,6 +596,21 @@ function openMenu(){
       if(await ask("今のデータを置き換えて読み込みますか？","読み込む")){ S=Object.assign(blank(),d); save(); closeSheet(); locate(true); }
     }catch(e){ toast("読み込めない形式です"); }
   };
+}
+
+/* 登録したアプリの管理 */
+function openAppManager(){
+  openSheet(`<h2>登録したアプリ</h2>
+    <button class="btn" id="mgNew">＋ アプリを新規登録</button>
+    <div class="results" style="max-height:none">${S.apps.map(a=>{
+      const n=S.places.filter(p=>p.apps.includes(a.id)).length;
+      return `<button class="row" data-m="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${n}か所で使用 ・ ${esc(linkLabel(a.url,a.name))}</small></span></button>`;
+    }).join("") || '<p class="note" style="text-align:center">登録したアプリはまだありません</p>'}</div>
+    <button class="btn sub" id="mgBack">戻る</button>`);
+  $("#mgNew").onclick=()=>openAppForm(null, ()=>openAppManager());
+  body.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>
+    openAppForm(S.apps.find(a=>a.id===b.dataset.m), ()=>{ render(); openAppManager(); }));
+  $("#mgBack").onclick=openMenu;
 }
 
 /* 地図で位置調整 */
@@ -649,6 +678,10 @@ stage.addEventListener("touchend",e=>{
 });
 document.getElementById("btnRefresh").onclick=()=>locate(false);
 document.getElementById("btnMenu").onclick=openMenu;
+
+/* ピンチ拡大を止める */
+["gesturestart","gesturechange","gestureend"].forEach(t=>document.addEventListener(t,e=>e.preventDefault()));
+document.addEventListener("touchmove",e=>{ if(e.touches.length>1) e.preventDefault(); },{passive:false});
 
 /* 起動 */
 sortPlaces(); render(); locate(true);
