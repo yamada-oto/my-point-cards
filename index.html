@@ -229,7 +229,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.25-11";
+const VERSION = "2026.11.25-12";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
@@ -785,7 +785,7 @@ function openCardManager(){
       const sub=(c ? (c.number ? "番号あり ・ "+(c.format||BRANDS[k].format||"CODE128") : "番号なし") : "未登録")+" ・ "+n+"か所で使用";
       return `<button class="row" data-k="${k}">${brandIcon(k)}<span class="t"><b>${esc(BRANDS[k].name)}</b><small>${esc(sub)}</small></span></button>`;
     }).join("")}</div>
-    <button class="btn sub" id="cmBack">戻る</button>`);
+    <button class="btn sub" id="cmBack">戻る</button>`, "app");
   body.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>openCardEditor(b.dataset.k));
   $("#cmBack").onclick=openMenu;
   ensureBrandIcons().then(ch=>{ if(ch && sheet.classList.contains("on") && body.querySelector("[data-k]") && $("#cmBack")) openCardManager(); });
@@ -793,7 +793,7 @@ function openCardManager(){
 function openCardEditor(k){
   openSheet(`<h2>${esc(BRANDS[k].name)}</h2>${cardFields(k)}
     <div class="bar"><button class="btn sub" id="cancel">キャンセル</button><button class="btn" id="ok">保存</button></div>
-    ${S.cards[k]?'<button class="btn danger" id="delCard">このカード情報を削除</button>':""}`);
+    ${S.cards[k]?'<button class="btn danger" id="delCard">このカード情報を削除</button>':""}`, "app");
   $("#cancel").onclick=openCardManager;
   $("#ok").onclick=()=>{ readCard(k); save(); render(); toast("保存しました"); openCardManager(); };
   const d=$("#delCard");
