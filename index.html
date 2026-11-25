@@ -221,7 +221,7 @@ input[type=range]{padding:0;border:0;background:none;touch-action:none}
 /* ===== データ ===== */
 const BRANDS = {
   rakuten:{name:"楽天ポイントカード", short:"楽天ポイント", term:"楽天ポイントカード", storeId:"1139755229",
-    bg:"linear-gradient(135deg,#d0021b 0%,#8f0012 100%)", color:"#bf0000"},
+    format:"codabar", bg:"linear-gradient(135deg,#d0021b 0%,#8f0012 100%)", color:"#bf0000"},
   vpoint:{name:"Vポイント", short:"Vポイント", term:"Vポイントアプリ", storeId:"468976361",
     bg:"linear-gradient(135deg,#0b2a6f 0%,#16469e 70%,#f2c200 160%)", color:"#0b2a6f"},
   ponta:{name:"Ponta", short:"Ponta", term:"Ponta ポイント", storeId:"1036066384", format:"codabar",
@@ -229,12 +229,14 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.25-12";
+const VERSION = "2026.11.25-13";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = blank(); }
 /* Pontaのバーコードはコーデバー(NW-7)。以前の初期値CODE128で保存済みなら一度だけ直す */
+/* 楽天のカード裏バーコードも同じコーデバー（A+16桁+A）。以前の初期値CODE128なら一度だけ直す */
+if(S.cards && S.cards.rakuten && S.cards.rakuten.format==="CODE128" && !S.fixRakuten){ S.cards.rakuten.format="codabar"; S.fixRakuten=true; save(); }
 if(S.cards && S.cards.ponta && S.cards.ponta.format==="CODE128" && !S.fixPonta){ S.cards.ponta.format="codabar"; S.fixPonta=true; save(); }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast("保存できませんでした"); } }
 const uid = () => Math.random().toString(36).slice(2,10);
