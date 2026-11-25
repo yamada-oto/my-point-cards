@@ -163,7 +163,9 @@ label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--mu
 .sortable .row{touch-action:pan-y;cursor:grab}
 .pin-handle{background:none;border:0;cursor:grab}
 .pin-handle svg{display:block;overflow:visible}
-.row.lift{position:relative;z-index:5;transition:none;box-shadow:0 8px 20px rgba(0,0,0,.25)}
+.row.pressing{background:var(--line);transition:background .3s}
+.row.lift{position:relative;z-index:5;transition:none;box-shadow:0 10px 24px rgba(0,0,0,.45);outline:2px solid var(--accent);background:var(--surface)}
+.swipe.lifting{overflow:visible;z-index:6}
 
 /* 編集中の場所名 */
 .name-in{flex:1;min-width:0;font-size:17px!important;font-weight:700;padding:6px 10px;border:1.5px dashed var(--accent);border-radius:8px;background:var(--bg)}
@@ -227,7 +229,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.25-10";
+const VERSION = "2026.11.25-11";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
@@ -309,11 +311,17 @@ const appIcon = a => a.icon ? `<img src="${esc(a.icon)}" alt="">` : `<div class=
 const stage = document.getElementById("stage");
 function current(){ return mode==="place" ? order[idx] : null; }
 
+const near = q => !!(pos && q && dist(pos,q) <= q.radius);
+function stepTo(step){ /* 範囲内の場所だけを順に送る */
+  if(mode!=="place") return -1;
+  for(let n=idx+step; n>=0 && n<order.length; n+=step) if(near(order[n])) return n;
+  return -1;
+}
 function render(){
   const p = current();
   const next = document.getElementById("btnNext"), prev = document.getElementById("btnPrev");
-  next.hidden = !(order.length && (mode==="empty" || idx < order.length-1));
-  prev.hidden = !(mode==="place" && idx>0);
+  next.hidden = stepTo(1)<0;
+  prev.hidden = stepTo(-1)<0;
   if(!p){ editing=false; syncEdit(); stage.innerHTML = emptyView(); bindEmpty(); return; }
   syncEdit();
   const d = pos ? dist(pos,p) : null;
@@ -657,7 +665,7 @@ function swipeRow(el, {onTap,onEdit,onDel}){
     st={x:e.clientX,y:e.clientY,open}; moved=false; dragged=false; row.style.transition="none";
   });
   row.addEventListener("pointermove",e=>{
-    if(!st) return;
+    if(!st || row.classList.contains("lift")) return;
     const mx=e.clientX-st.x, my=e.clientY-st.y;
     if(!moved){
       if(Math.abs(mx)>8 && Math.abs(mx)>Math.abs(my)){ moved=true; dragged=true; try{ row.setPointerCapture(e.pointerId); }catch(_){} }
@@ -690,16 +698,17 @@ function sortableList(box, {onTap,onMove}){
     let st=null, timer=null, drag=false, handled=false;
     row.addEventListener("pointerdown",e=>{
       st={x:e.clientX,y:e.clientY}; drag=false; handled=false;
-      timer=setTimeout(()=>{ drag=true; sorting=true; row.classList.add("lift"); if(navigator.vibrate) navigator.vibrate(15); try{ row.setPointerCapture(e.pointerId); }catch(_){} },450);
+      row.classList.add("pressing");
+      timer=setTimeout(()=>{ drag=true; sorting=true; row.classList.remove("pressing"); row.classList.add("lift"); const h=row.closest(".swipe"); if(h) h.classList.add("lifting"); if(navigator.vibrate) navigator.vibrate(15); try{ row.setPointerCapture(e.pointerId); }catch(_){} },450);
     });
     row.addEventListener("pointermove",e=>{
       if(!st) return;
       const dy=e.clientY-st.y;
-      if(!drag){ if(Math.hypot(e.clientX-st.x,dy)>8){ clearTimeout(timer); st=null; } return; }
-      row.style.transform=`translateY(${dy}px)`;
+      if(!drag){ if(Math.hypot(e.clientX-st.x,dy)>8){ clearTimeout(timer); row.classList.remove("pressing"); st=null; } return; }
+      row.style.transform=`translateY(${dy}px) scale(1.03)`;
     });
     const end=e=>{
-      clearTimeout(timer);
+      clearTimeout(timer); row.classList.remove("pressing");
       if(!st) return;
       if(drag){
         handled=true; sorting=false;
@@ -708,7 +717,7 @@ function sortableList(box, {onTap,onMove}){
         const ids=others.map(r=>r.dataset.m);
         const at = before ? ids.indexOf(before.dataset.m) : ids.length;
         ids.splice(at,0,row.dataset.m);
-        row.classList.remove("lift"); row.style.transform="";
+        row.classList.remove("lift"); row.style.transform=""; const h2=row.closest(".swipe"); if(h2) h2.classList.remove("lifting");
         onMove(ids);
       }
       st=null; drag=false;
@@ -805,9 +814,24 @@ function openAppManager(){
       return `<div class="row" role="button" data-m="${a.id}">${appIcon(a)}<span class="t"><b>${esc(a.name)}</b><small>${n}か所で使用 ・ ${esc(linkLabel(a.url,a.name,a.storeId))}</small></span></div>`;
     }).join("") || '<p class="note" style="text-align:center">登録したアプリはまだありません</p>'}</div>
     <button class="btn sub" id="mgBack">戻る</button>`, "app");
+  /* 各行を .swipe で包み、左右どちらにスワイプしても削除が出る */
+  $("#mgList").querySelectorAll(".row").forEach(r=>{
+    const w=document.createElement("div"); w.className="swipe"; r.replaceWith(w);
+    w.innerHTML='<button class="act act-edit act-del2">削除</button><button class="act act-del">削除</button>'; w.appendChild(r);
+  });
   $("#mgNew").onclick=()=>openAppForm(null, ()=>openAppManager(), openAppManager);
+  const delApp=async id=>{
+    const a=S.apps.find(x=>x.id===id); if(!a) return;
+    if(await ask(`「${a.name}」を削除しますか？（登録した場所からも外れます）`,"削除")){
+      S.apps=S.apps.filter(x=>x.id!==id); S.places.forEach(pl=>pl.apps=pl.apps.filter(x=>x!==id)); save(); render(); openAppManager();
+    }
+  };
+  $("#mgList").querySelectorAll(".swipe").forEach(w=>{
+    const id=w.querySelector(".row").dataset.m;
+    swipeRow(w,{onTap:()=>{},onEdit:()=>delApp(id),onDel:()=>delApp(id)});
+  });
   sortableList($("#mgList"),{
-    onTap:row=>openAppForm(S.apps.find(a=>a.id===row.dataset.m), ()=>{ render(); openAppManager(); }, openAppManager),
+    onTap:row=>{ if(row.closest(".swipe").querySelector(".row").style.transform) return; openAppForm(S.apps.find(a=>a.id===row.dataset.m), ()=>{ render(); openAppManager(); }, openAppManager); },
     onMove:ids=>{ S.apps=ids.map(id=>S.apps.find(a=>a.id===id)).filter(Boolean); save(); openAppManager(); }
   });
   $("#mgBack").onclick=openMenu;
@@ -873,8 +897,7 @@ let tt; function toast(m){ const t=document.getElementById("toast"); t.textConte
 function go(step){
   if(!order.length) return;
   editing=false;
-  if(mode==="empty"){ if(step>0){ mode="place"; idx=0; } }
-  else { const n=idx+step; if(n<0||n>=order.length) return; idx=n; }
+  const n=stepTo(step); if(n<0) return; idx=n;
   render();
 }
 document.getElementById("btnNext").onclick=()=>go(1);
