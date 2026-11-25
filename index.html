@@ -110,10 +110,10 @@ body.editing .corner,body.editing .edge{display:none}
 #btnPrev{left:var(--sal);border-radius:0 12px 12px 0}
 
 /* シート */
-.scrim{position:fixed;inset:0;background:var(--overlay);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim{position:fixed;inset:0;background:transparent;z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.on{opacity:1;pointer-events:auto}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--surface);border-radius:20px 20px 0 0;
-  max-height:86vh;overflow-y:auto;transform:translateY(105%);transition:transform .25s ease;
+  max-height:86vh;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,.28);transform:translateY(105%);transition:transform .25s ease;
   padding:10px max(16px,var(--sar)) calc(var(--sab) + 20px) max(16px,var(--sal))}
 .sheet.on{transform:none}
 .sheet .grab{height:26px;margin:-6px 0 0;position:relative;touch-action:none}
@@ -230,7 +230,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.26-1";
+const VERSION = "2026.11.26-2";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
@@ -350,7 +350,7 @@ function render(){
     </div>`;
   }
   if(p.apps.length){
-    html += `<div class="apps${p.apps.length>3?" many":""}" id="apps">` + p.apps.map(id=>{
+    html += `<div class="apps${p.point&&p.apps.length>=7?" many":""}" id="apps">` + p.apps.map(id=>{
       const a = S.apps.find(x=>x.id===id); if(!a) return "";
       return `<div class="app-tile" data-app="${a.id}" role="button" tabindex="0">
         <button class="x" data-del-app="${a.id}" aria-label="${esc(a.name)}を外す">✕</button>
