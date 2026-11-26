@@ -221,16 +221,16 @@ input[type=range]{padding:0;border:0;background:none;touch-action:none}
 <script>
 /* ===== データ ===== */
 const BRANDS = {
-  rakuten:{name:"楽天ポイントカード", short:"楽天ポイント", term:"楽天ポイントカード", storeId:"1139755229",
+  rakuten:{name:"楽天ポイントカード", short:"楽天ポイント", term:"楽天ポイントカード", storeId:"1139755229", scheme:"rakutenpay://",
     format:"codabar", bg:"linear-gradient(135deg,#d0021b 0%,#8f0012 100%)", color:"#bf0000"},
-  vpoint:{name:"Vポイント", short:"Vポイント", term:"Vポイントアプリ", storeId:"468976361",
+  vpoint:{name:"Vポイント", short:"Vポイント", term:"Vポイントアプリ", storeId:"468976361", scheme:"tpointapp://",
     bg:"linear-gradient(135deg,#0b2a6f 0%,#16469e 70%,#f2c200 160%)", color:"#0b2a6f"},
-  ponta:{name:"Ponta", short:"Ponta", term:"Ponta ポイント", storeId:"1036066384", format:"codabar",
+  ponta:{name:"Ponta", short:"Ponta", term:"Ponta ポイント", storeId:"1036066384", scheme:"jp.ponta.myponta://", format:"codabar",
     bg:"linear-gradient(135deg,#f7a400 0%,#e66a00 100%)", color:"#f08c00"}
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.26-2";
+const VERSION = "2026.11.26-3";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
@@ -427,7 +427,7 @@ function bindPlace(p){
   const ni = document.getElementById("nameEdit");
   if(ni) ni.addEventListener("change",()=>{ const v=ni.value.trim(); if(v){ p.name=v; save(); } else ni.value=p.name; });
   const pl = document.getElementById("pointLaunch");
-  if(pl) pressable(pl, {tap:()=>editing?openEdit(p,{kind:"point"}):launch(S.brandUrls[p.point], BRANDS[p.point].short, BRANDS[p.point].storeId), long:enterEdit});
+  if(pl) pressable(pl, {tap:()=>editing?openEdit(p,{kind:"point"}):launch(S.brandUrls[p.point] || BRANDS[p.point].scheme, BRANDS[p.point].short, BRANDS[p.point].storeId), long:enterEdit});
   const cp = document.getElementById("codePanel");
   if(cp) pressable(cp, {tap:()=>editing?openEdit(p,{kind:"point"}):showBright(p.point), long:enterEdit});
   stage.querySelector("[data-del-point]")?.addEventListener("click", async ()=>{
@@ -548,7 +548,7 @@ function cardFields(k){
     <label class="f">バーコードの形式<select id="fFmt">
       ${["CODE128","EAN13","ITF","codabar","CODE39"].map(x=>`<option ${x===f?"selected":""}>${x}</option>`).join("")}
     </select></label>
-    <label class="f">${esc(BRANDS[k].short)}アプリの起動リンク（空欄でOK）<input id="fUrl" autocomplete="off" value="${esc(S.brandUrls[k])}" placeholder="空欄: App Storeのページを開く"></label>
+    <label class="f">${esc(BRANDS[k].short)}アプリの起動リンク（空欄でOK）<input id="fUrl" autocomplete="off" value="${esc(S.brandUrls[k])}" placeholder="空欄: 標準（${esc(BRANDS[k].scheme)}）"></label>
     <p class="note">起動リンクが空欄のときは、App Storeのページが開きます。そこで「開く」を押すとアプリが起動します。アプリを直接開きたい場合は、ショートカットを作り、「shortcuts://run-shortcut?name=ショートカット名」を入力してください。店のレジで読めない場合は、バーコードの形式を変えて試してください。</p>`;
 }
 function readCard(k){
