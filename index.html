@@ -230,7 +230,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.26-3";
+const VERSION = "2026.11.26-4";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
@@ -548,13 +548,13 @@ function cardFields(k){
     <label class="f">バーコードの形式<select id="fFmt">
       ${["CODE128","EAN13","ITF","codabar","CODE39"].map(x=>`<option ${x===f?"selected":""}>${x}</option>`).join("")}
     </select></label>
-    <label class="f">${esc(BRANDS[k].short)}アプリの起動リンク（空欄でOK）<input id="fUrl" autocomplete="off" value="${esc(S.brandUrls[k])}" placeholder="空欄: 標準（${esc(BRANDS[k].scheme)}）"></label>
+    <label class="f">${esc(BRANDS[k].short)}アプリの起動リンク<input id="fUrl" autocomplete="off" value="${esc(S.brandUrls[k]||BRANDS[k].scheme)}"></label>
     <p class="note">起動リンクが空欄のときは、App Storeのページが開きます。そこで「開く」を押すとアプリが起動します。アプリを直接開きたい場合は、ショートカットを作り、「shortcuts://run-shortcut?name=ショートカット名」を入力してください。店のレジで読めない場合は、バーコードの形式を変えて試してください。</p>`;
 }
 function readCard(k){
   const num=$("#fNum").value.replace(/\s|-/g,"");
   S.cards[k]={number:num, format:$("#fFmt").value};
-  S.brandUrls[k]=$("#fUrl").value.trim();
+  { const u=$("#fUrl").value.trim(); S.brandUrls[k]=(u===BRANDS[k].scheme)?"":u; }
   return true;
 }
 function openCardForm(p,k){
