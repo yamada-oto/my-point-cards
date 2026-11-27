@@ -230,7 +230,7 @@ const BRANDS = {
 };
 const PATTERN = "repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 2px,transparent 2px 22px),radial-gradient(circle at 110% -10%,rgba(255,255,255,.28),transparent 55%)";
 const KEY = "pointBarcodeApp.v1";
-const VERSION = "2026.11.26-4";
+const VERSION = "2026.11.28-1";
 const PIN = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 const blank = () => ({places:[], apps:[], cards:{}, brandIcons:{}, brandUrls:{}});
 let S;
@@ -659,6 +659,7 @@ function openEdit(p, item){
 
 /* 場所の行を左右にスワイプ（右: 編集 / 左: 削除） */
 function swipeRow(el, {onTap,onEdit,onDel}){
+  const noRight=!onEdit; /* 編集がなければ右スワイプは動かさない */
   const row=el.querySelector(".row"), W=88;
   let st=null, dx=0, moved=false, open=0, dragged=false;
   const setX=x=>{ row.style.transform = x ? `translateX(${x}px)` : ""; };
@@ -674,12 +675,12 @@ function swipeRow(el, {onTap,onEdit,onDel}){
       if(Math.abs(mx)>8 && Math.abs(mx)>Math.abs(my)){ moved=true; dragged=true; try{ row.setPointerCapture(e.pointerId); }catch(_){} }
       else if(Math.abs(my)>8){ row.style.transition=""; st=null; dragged=true; return; }
     }
-    if(moved){ dx=Math.max(-W,Math.min(W,st.open+mx)); setX(dx); }
+    if(moved){ dx=Math.max(-W,Math.min(noRight?0:W,st.open+mx)); setX(dx); }
   });
   const end=()=>{
     if(!st) return;
     row.style.transition="";
-    if(moved){ open = dx>W/2 ? W : dx<-W/2 ? -W : 0; setX(open); }
+    if(moved){ open = dx>W/2 ? W : dx<-W/2 ? -W : 0; setX(open); el.dataset.sw=Date.now(); }
     st=null;
   };
   row.addEventListener("pointerup",end); row.addEventListener("pointercancel",end);
@@ -688,7 +689,7 @@ function swipeRow(el, {onTap,onEdit,onDel}){
     if(open!==0){ el.close(); return; }
     onTap();
   });
-  el.querySelector(".act-edit").onclick=onEdit;
+  el.querySelector(".act-edit").onclick=onEdit||null;
   el.querySelector(".act-del").onclick=onDel;
 }
 
@@ -820,7 +821,7 @@ function openAppManager(){
   /* 各行を .swipe で包み、左右どちらにスワイプしても削除が出る */
   $("#mgList").querySelectorAll(".row").forEach(r=>{
     const w=document.createElement("div"); w.className="swipe"; r.replaceWith(w);
-    w.innerHTML='<button class="act act-edit act-del2">削除</button><button class="act act-del">削除</button>'; w.appendChild(r);
+    w.innerHTML='<button class="act act-edit" hidden></button><button class="act act-del">削除</button>'; w.appendChild(r);
   });
   $("#mgNew").onclick=()=>openAppForm(null, ()=>openAppManager(), openAppManager);
   const delApp=async id=>{
@@ -831,10 +832,10 @@ function openAppManager(){
   };
   $("#mgList").querySelectorAll(".swipe").forEach(w=>{
     const id=w.querySelector(".row").dataset.m;
-    swipeRow(w,{onTap:()=>{},onEdit:()=>delApp(id),onDel:()=>delApp(id)});
+    swipeRow(w,{onTap:()=>{},onDel:()=>delApp(id)});
   });
   sortableList($("#mgList"),{
-    onTap:row=>{ if(row.closest(".swipe").querySelector(".row").style.transform) return; openAppForm(S.apps.find(a=>a.id===row.dataset.m), ()=>{ render(); openAppManager(); }, openAppManager); },
+    onTap:row=>{ const hw=row.closest(".swipe"); if(row.style.transform || Date.now()-(+hw.dataset.sw||0)<500) return; openAppForm(S.apps.find(a=>a.id===row.dataset.m), ()=>{ render(); openAppManager(); }, openAppManager); },
     onMove:ids=>{ S.apps=ids.map(id=>S.apps.find(a=>a.id===id)).filter(Boolean); save(); openAppManager(); }
   });
   $("#mgBack").onclick=openMenu;
